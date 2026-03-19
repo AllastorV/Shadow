@@ -24,6 +24,11 @@ from ..schemas.asset import AssetResponse, AssetUpdate
 from ..utils.dependencies import get_current_user, require_editor, get_accessible_project
 from ..services.ai_service import ai_service
 from ..config import settings
+from ..ws_manager import manager as ws_manager
+
+
+async def _ws_broadcast(project_id: int, event: dict) -> None:
+    await ws_manager.broadcast(project_id, event)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/assets", tags=["assets"])
@@ -503,6 +508,7 @@ def update_asset_status(
     request: Request,
     asset_id: int,
     status: AssetStatus,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_editor),
 ):
@@ -514,6 +520,18 @@ def update_asset_status(
     db.commit()
     db.refresh(asset)
     _attach_comment_counts([asset], db)
+
+    # Gerçek zamanlı yayın
+    background_tasks.add_task(_ws_broadcast, asset.project_id, {
+        "type":     "asset_status_changed",
+        "asset_id": asset_id,
+        "status":   status.value if hasattr(status, "value") else str(status),
+        "by": {
+            "id":        current_user.id,
+            "username":  current_user.username,
+            "full_name": current_user.full_name,
+        },
+    })
     return asset
 
 

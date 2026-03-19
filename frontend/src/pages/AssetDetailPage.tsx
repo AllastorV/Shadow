@@ -15,6 +15,7 @@ import { useAuthStore } from '../store/auth'
 import clsx from 'clsx'
 import { useShortcutAction } from '../utils/shortcuts'
 import VideoPlayer, { type VideoPlayerHandle } from '../components/VideoPlayer'
+import { useCollaboration } from '../hooks/useCollaboration'
 
 type Tab = 'info' | 'comments' | 'share' | 'markers'
 
@@ -205,6 +206,13 @@ export default function AssetDetailPage() {
   // İndirme: kimlik doğrulamalı endpoint
   const downloadUrl = `/api/v1/assets/${assetId}/download`
 
+  // ── Gerçek zamanlı işbirliği ───────────────────────────────────────────────
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const { activeUsers, status: collabStatus, maxUsers } = useCollaboration({
+    projectId: asset.project_id,
+    assetId:   assetId ?? '',
+  })
+
   return (
     <div className="flex h-full">
       {/* Preview Panel */}
@@ -217,6 +225,47 @@ export default function AssetDetailPage() {
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-white truncate">{asset.original_name}</p>
           </div>
+
+          {/* ── Aktif kullanıcılar (gerçek zamanlı) ── */}
+          {collabStatus !== 'disconnected' && (
+            <div className="flex items-center gap-1.5 shrink-0">
+              {/* Avatar yığını */}
+              <div className="flex -space-x-1.5">
+                {activeUsers.slice(0, 5).map(u => (
+                  <div
+                    key={u.id}
+                    title={u.full_name || u.username}
+                    className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold ring-2 shrink-0 select-none"
+                    style={{
+                      background: `hsl(${(u.id * 47) % 360}, 60%, 45%)`,
+                      ringColor:  'var(--c-bg)',
+                    }}
+                  >
+                    {(u.full_name || u.username).slice(0, 2).toUpperCase()}
+                  </div>
+                ))}
+                {activeUsers.length > 5 && (
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold ring-2 shrink-0"
+                    style={{ background: '#2d3a55', color: '#8b9ab8', ringColor: 'var(--c-bg)' }}>
+                    +{activeUsers.length - 5}
+                  </div>
+                )}
+              </div>
+              {/* Sayaç + durum */}
+              <span
+                className="text-[11px] font-mono tabular-nums px-1.5 py-0.5 rounded-md"
+                style={{
+                  background: collabStatus === 'full' ? 'rgba(239,68,68,0.12)' : 'rgba(99,102,241,0.12)',
+                  color:      collabStatus === 'full' ? '#f87171' : '#a5b4fc',
+                  border:     collabStatus === 'full' ? '1px solid rgba(239,68,68,0.25)' : '1px solid rgba(99,102,241,0.2)',
+                }}
+                title={collabStatus === 'full' ? `Oda dolu (${maxUsers}/${maxUsers})` : `${activeUsers.length}/${maxUsers} aktif`}
+              >
+                {collabStatus === 'connecting' ? '···' : `${activeUsers.length}/${maxUsers}`}
+              </span>
+            </div>
+          )}
+
           {/* Status actions */}
           <div className="flex gap-2">
             <button

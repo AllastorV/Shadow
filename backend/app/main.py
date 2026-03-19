@@ -9,7 +9,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from .database import Base, engine
-from .routers import auth, projects, assets, comments, share, markers
+from .routers import auth, projects, assets, comments, share, markers, collab
 from .config import settings
 
 # Tablo oluştur
@@ -67,6 +67,7 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
 
     # CSP: medya (img/video/audio) hem API hem static /files/'den yüklenebilir
+    # connect-src: ws:// ve wss:// aynı origin'e izin ver (gerçek zamanlı işbirliği)
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "img-src 'self' data: blob:; "
@@ -74,7 +75,7 @@ async def security_headers_middleware(request: Request, call_next):
         "script-src 'self'; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com; "
-        "connect-src 'self'; "
+        "connect-src 'self' ws: wss:; "
         "frame-ancestors 'none';"
     )
 
@@ -120,6 +121,7 @@ app.include_router(assets.router, prefix="/api/v1")
 app.include_router(comments.router, prefix="/api/v1")
 app.include_router(share.router, prefix="/api/v1")
 app.include_router(markers.router, prefix="/api/v1")
+app.include_router(collab.router)  # WebSocket: /ws/{project_id}
 
 
 @app.get("/api/v1/health")

@@ -14,6 +14,11 @@ from ..models.marker import Marker
 from ..models.user import User
 from ..schemas.marker import MarkerCreate, MarkerResponse, MarkerUpdate
 from ..utils.dependencies import get_accessible_project, get_current_user
+from ..ws_manager import manager as ws_manager
+
+
+async def _ws_broadcast(project_id: int, event: dict) -> None:
+    await ws_manager.broadcast(project_id, event)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/markers", tags=["markers"])
@@ -121,6 +126,28 @@ def create_marker(
 
     # Sidecar dosyalarını arka planda güncelle
     background_tasks.add_task(_sync_bg, asset_id)
+
+    # Proje odasına gerçek zamanlı yayın
+    background_tasks.add_task(_ws_broadcast, asset.project_id, {
+        "type":      "marker_created",
+        "asset_id":  asset_id,
+        "marker": {
+            "id":           marker.id,
+            "label":        marker.label,
+            "note":         marker.note,
+            "color":        marker.color if isinstance(marker.color, str) else marker.color.value,
+            "timestamp":    marker.timestamp,
+            "x_pos":        marker.x_pos,
+            "y_pos":        marker.y_pos,
+            "asset_id":     marker.asset_id,
+            "created_by_id": marker.created_by_id,
+        },
+        "by": {
+            "id":        current_user.id,
+            "username":  current_user.username,
+            "full_name": current_user.full_name,
+        },
+    })
     return marker
 
 
@@ -164,12 +191,25 @@ def delete_marker(
     if not marker:
         raise HTTPException(status_code=404, detail="Marker not found")
 
-    _get_asset_checked(marker.asset_id, current_user, db)
-
-    asset_id = marker.asset_id
+    del_asset  = _get_asset_checked(marker.asset_id, current_user, db)
+    asset_id   = marker.asset_id
+    project_id = del_asset.project_id
+    mid        = marker.id
     db.delete(marker)
     db.commit()
     background_tasks.add_task(_sync_bg, asset_id)
+
+    # Gerçek zamanlı yayın
+    background_tasks.add_task(_ws_broadcast, project_id, {
+        "type":      "marker_deleted",
+        "asset_id":  asset_id,
+        "marker_id": mid,
+        "by": {
+            "id":        current_user.id,
+            "username":  current_user.username,
+            "full_name": current_user.full_name,
+        },
+    })
 
 
 # ── Export Endpointleri ───────────────────────────────────────────────────────

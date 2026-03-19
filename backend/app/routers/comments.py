@@ -1,5 +1,5 @@
 import logging
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from typing import List
 from slowapi import Limiter
@@ -10,6 +10,11 @@ from ..models.comment import Comment
 from ..models.asset import Asset
 from ..schemas.comment import CommentCreate, CommentResponse
 from ..utils.dependencies import get_current_user, get_accessible_project
+from ..ws_manager import manager as ws_manager
+
+
+async def _ws_broadcast(project_id: int, event: dict) -> None:
+    await ws_manager.broadcast(project_id, event)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/comments", tags=["comments"])
@@ -52,11 +57,12 @@ def add_comment(
     request: Request,
     asset_id: int,
     data: CommentCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     # SECURITY: Verify user can access the project this asset belongs to
-    _get_asset_and_check_access(asset_id, current_user, db)
+    asset = _get_asset_and_check_access(asset_id, current_user, db)
 
     comment = Comment(
         content=data.content[:2000],  # Cap comment length
@@ -70,6 +76,17 @@ def add_comment(
     db.add(comment)
     db.commit()
     db.refresh(comment)
+
+    # Gerçek zamanlı yayın
+    background_tasks.add_task(_ws_broadcast, asset.project_id, {
+        "type":     "comment_created",
+        "asset_id": asset_id,
+        "by": {
+            "id":        current_user.id,
+            "username":  current_user.username,
+            "full_name": current_user.full_name,
+        },
+    })
     return comment
 
 
