@@ -82,9 +82,15 @@ async def security_headers_middleware(request: Request, call_next):
     # Sadece prodüksiyonda etkinleştir (HTTP geliştirme için devre dışı)
     # response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
 
-    # Server parmak izi gizle
-    response.headers.pop("Server", None)
-    response.headers.pop("X-Powered-By", None)
+    # Server parmak izi gizle (MutableHeaders.pop yok — del kullan)
+    try:
+        del response.headers["Server"]
+    except (KeyError, AttributeError):
+        pass
+    try:
+        del response.headers["X-Powered-By"]
+    except (KeyError, AttributeError):
+        pass
     return response
 
 

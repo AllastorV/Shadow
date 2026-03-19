@@ -23,8 +23,15 @@ class Comment(Base):
     asset = relationship("Asset", back_populates="comments")
     author = relationship("User", back_populates="comments")
     # Self-referential: replies to this comment
+    # remote_side=[id] → "id" tarafı "one", "parent_id" tarafı "many"
     replies = relationship(
         "Comment",
         foreign_keys=[parent_id],
-        backref="parent_comment",
+        back_populates="parent_comment",
+    )
+    parent_comment = relationship(
+        "Comment",
+        foreign_keys=[parent_id],
+        back_populates="replies",
+        remote_side="Comment.id",
     )
