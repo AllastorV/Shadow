@@ -6,7 +6,6 @@ import {
   Share2, MessageSquare, Image, Video, Music, FileText,
   Loader2, Link2, Lock, Calendar, Eye, Copy, CheckCheck,
   Trash2, DownloadCloud, MapPin, Plus, FileCode2, Film,
-  ChevronRight,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../utils/api'
@@ -15,6 +14,7 @@ import { formatFileSize, formatDate, formatRelative } from '../utils/format'
 import { useAuthStore } from '../store/auth'
 import clsx from 'clsx'
 import { useShortcutAction } from '../utils/shortcuts'
+import VideoPlayer, { type VideoPlayerHandle } from '../components/VideoPlayer'
 
 type Tab = 'info' | 'comments' | 'share' | 'markers'
 
@@ -58,7 +58,8 @@ export default function AssetDetailPage() {
   const [addingImageMarker, setAddingImageMarker] = useState(false)
   const [videoCurrentTime, setVideoCurrentTime] = useState(0)
   const [videoDuration, setVideoDuration] = useState(0)
-  const videoRef = useRef<HTMLVideoElement>(null)
+  const videoPlayerRef = useRef<VideoPlayerHandle>(null)
+  const markerLabelRef = useRef<HTMLInputElement>(null)
 
   const { data: asset, isLoading } = useQuery<Asset>({
     queryKey: ['asset', assetId],
@@ -80,7 +81,7 @@ export default function AssetDetailPage() {
   const { data: markers = [] } = useQuery<Marker[]>({
     queryKey: ['markers', assetId],
     queryFn: () => api.get(`/markers/asset/${assetId}`).then((r) => r.data),
-    enabled: tab === 'markers',
+    enabled: true,
     staleTime: 30_000,
   })
 
@@ -136,15 +137,26 @@ export default function AssetDetailPage() {
     },
   })
 
+  // ── Add marker from video player ───────────────────────────────────────────
+  const handleAddMarkerClick = useCallback((time: number) => {
+    setMarkerTimestamp(time)
+    setMarkerXY(null)
+    setTab('markers')
+    // Focus label input after tab switch renders
+    setTimeout(() => markerLabelRef.current?.focus(), 80)
+  }, [])
+
   const TABS: Tab[] = ['info', 'comments', 'share', 'markers']
   useShortcutAction('approve_asset', () => { if (asset) statusMutation.mutate('approved') }, [asset])
   useShortcutAction('reject_asset',  () => { if (asset) statusMutation.mutate('rejected') }, [asset])
-  useShortcutAction('play_pause',    () => {
-    const v = videoRef.current
-    if (!v) return
-    v.paused ? v.play() : v.pause()
+  useShortcutAction('play_pause', () => {
+    // VideoPlayer handles Space/K internally via its own keydown listener
+    // This shortcut is a no-op here to avoid double-firing; VideoPlayer takes priority
   })
-  useShortcutAction('add_marker', () => setTab('markers'))
+  useShortcutAction('add_marker', () => {
+    const time = videoPlayerRef.current?.currentTime ?? videoCurrentTime
+    handleAddMarkerClick(time)
+  })
   useShortcutAction('next_tab', () => setTab(t => {
     const i = TABS.indexOf(t); return TABS[(i + 1) % TABS.length]
   }))
@@ -245,83 +257,74 @@ export default function AssetDetailPage() {
         </div>
 
         {/* Preview */}
-        <div className="flex-1 flex flex-col bg-black/20 overflow-hidden">
-          <div className="flex-1 flex items-center justify-center p-4 overflow-hidden relative">
-            {asset.asset_type === 'image' && !asset.mime_type.startsWith('image/x-') && tab === 'markers' ? (
-              /* Gorsel marker modu: tıklayarak marker ekle */
-              <ImageMarkerOverlay
-                src={assetUrl}
-                markers={markers}
-                adding={addingImageMarker}
-                onImageClick={(x, y) => {
-                  setMarkerXY({ x, y })
-                  setMarkerTimestamp(null)
-                  setAddingImageMarker(false)
-                }}
-                onMarkerClick={(m) => {
-                  if (window.confirm(`"${m.label}" markerını silmek istiyor musunuz?`)) {
-                    deleteMarkerMutation.mutate(m.id)
-                  }
-                }}
-              />
-            ) : asset.asset_type === 'image' && !asset.mime_type.startsWith('image/x-') ? (
-              <img src={assetUrl} alt={asset.original_name} className="max-w-full max-h-full object-contain rounded-lg" />
-            ) : asset.asset_type === 'image' && asset.mime_type.startsWith('image/x-') ? (
-              /* RAW format — tarayıcıda görüntülenemez */
-              <div className="flex flex-col items-center gap-4 text-center">
-                <div className="w-20 h-20 rounded-3xl flex items-center justify-center" style={{ background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.25)' }}>
-                  <Image size={36} className="text-brand-400" />
-                </div>
-                <div>
-                  <p className="font-semibold text-sm" style={{ color: 'inherit' }}>RAW Görsel</p>
-                  <p className="text-xs mt-1" style={{ color: '#6b7a96' }}>
-                    {asset.mime_type} — tarayıcıda önizleme desteklenmiyor
-                  </p>
-                  <p className="text-xs mt-0.5" style={{ color: '#4a5a72' }}>
-                    Dosyayı indirerek görüntüleyebilirsiniz
-                  </p>
-                </div>
-                <a href={`/api/v1/assets/${assetId}/download`} download={asset.original_name} className="btn-primary text-xs">
-                  <Download size={13} /> RAW Dosyasını İndir
-                </a>
-              </div>
-            ) : asset.asset_type === 'video' ? (
-              <video
-                ref={videoRef}
-                src={assetUrl}
-                controls
-                className="max-w-full max-h-full rounded-lg"
-                onTimeUpdate={() => setVideoCurrentTime(videoRef.current?.currentTime ?? 0)}
-                onLoadedMetadata={() => setVideoDuration(videoRef.current?.duration ?? 0)}
-              />
-            ) : asset.asset_type === 'audio' ? (
-              <div className="text-center">
-                <Music size={64} className="text-slate-600 mx-auto mb-4" />
-                <audio src={assetUrl} controls className="w-64" />
-              </div>
-            ) : (
-              <div className="text-center text-slate-500">
-                <FileText size={64} className="mx-auto mb-3" />
-                <p className="text-sm">{asset.mime_type}</p>
-              </div>
-            )}
-          </div>
+        <div className="flex-1 flex flex-col overflow-hidden" style={{ backgroundColor: asset.asset_type === 'video' ? '#000' : 'rgba(0,0,0,0.2)' }}>
 
-          {/* Video marker timeline — yalnızca markers tabında göster */}
-          {asset.asset_type === 'video' && tab === 'markers' && (
-            <VideoMarkerTimeline
+          {/* ── Video: custom Premiere-like player (takes full height) ── */}
+          {asset.asset_type === 'video' && (
+            <VideoPlayer
+              ref={videoPlayerRef}
+              src={assetUrl}
               markers={markers}
-              currentTime={videoCurrentTime}
-              duration={videoDuration}
-              onSeek={(t) => {
-                if (videoRef.current) videoRef.current.currentTime = t
+              onTimeUpdate={setVideoCurrentTime}
+              onDurationChange={setVideoDuration}
+              onAddMarkerClick={handleAddMarkerClick}
+              onMarkerClick={m => {
+                videoPlayerRef.current?.seekTo(m.timestamp!)
               }}
-              onAddAtCurrent={() => {
-                setMarkerTimestamp(videoCurrentTime)
-                setMarkerXY(null)
-              }}
-              onDeleteMarker={(id) => deleteMarkerMutation.mutate(id)}
             />
+          )}
+
+          {/* ── Non-video content ── */}
+          {asset.asset_type !== 'video' && (
+            <div className="flex-1 flex items-center justify-center p-4 overflow-hidden relative">
+              {asset.asset_type === 'image' && !asset.mime_type.startsWith('image/x-') && tab === 'markers' ? (
+                <ImageMarkerOverlay
+                  src={assetUrl}
+                  markers={markers}
+                  adding={addingImageMarker}
+                  onImageClick={(x, y) => {
+                    setMarkerXY({ x, y })
+                    setMarkerTimestamp(null)
+                    setAddingImageMarker(false)
+                  }}
+                  onMarkerClick={(m) => {
+                    if (window.confirm(`"${m.label}" markerını silmek istiyor musunuz?`)) {
+                      deleteMarkerMutation.mutate(m.id)
+                    }
+                  }}
+                />
+              ) : asset.asset_type === 'image' && !asset.mime_type.startsWith('image/x-') ? (
+                <img src={assetUrl} alt={asset.original_name} className="max-w-full max-h-full object-contain rounded-lg" />
+              ) : asset.asset_type === 'image' && asset.mime_type.startsWith('image/x-') ? (
+                <div className="flex flex-col items-center gap-4 text-center">
+                  <div className="w-20 h-20 rounded-3xl flex items-center justify-center" style={{ background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.25)' }}>
+                    <Image size={36} className="text-brand-400" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-sm" style={{ color: 'inherit' }}>RAW Görsel</p>
+                    <p className="text-xs mt-1" style={{ color: '#6b7a96' }}>
+                      {asset.mime_type} — tarayıcıda önizleme desteklenmiyor
+                    </p>
+                    <p className="text-xs mt-0.5" style={{ color: '#4a5a72' }}>
+                      Dosyayı indirerek görüntüleyebilirsiniz
+                    </p>
+                  </div>
+                  <a href={`/api/v1/assets/${assetId}/download`} download={asset.original_name} className="btn-primary text-xs">
+                    <Download size={13} /> RAW Dosyasını İndir
+                  </a>
+                </div>
+              ) : asset.asset_type === 'audio' ? (
+                <div className="text-center">
+                  <Music size={64} className="text-slate-600 mx-auto mb-4" />
+                  <audio src={assetUrl} controls className="w-64" />
+                </div>
+              ) : (
+                <div className="text-center text-slate-500">
+                  <FileText size={64} className="mx-auto mb-3" />
+                  <p className="text-sm">{asset.mime_type}</p>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -574,7 +577,7 @@ export default function AssetDetailPage() {
               onColorChange={setMarkerColor}
               onTimestampChange={setMarkerTimestamp}
               onToggleImageAdd={() => setAddingImageMarker((v) => !v)}
-              onSetCurrentTime={() => setMarkerTimestamp(videoCurrentTime)}
+              onSetCurrentTime={() => setMarkerTimestamp(videoPlayerRef.current?.currentTime ?? videoCurrentTime)}
               onSubmit={() => {
                 if (!markerLabel.trim()) { toast.error('Marker etiketi gerekli'); return }
                 createMarkerMutation.mutate({
@@ -587,9 +590,8 @@ export default function AssetDetailPage() {
                 })
               }}
               onDelete={(id) => deleteMarkerMutation.mutate(id)}
-              onSeek={(t) => {
-                if (videoRef.current) videoRef.current.currentTime = t
-              }}
+              onSeek={(t) => videoPlayerRef.current?.seekTo(t)}
+              labelRef={markerLabelRef}
               assetId={Number(assetId)}
             />
           )}
@@ -678,7 +680,7 @@ function MarkerTab({
   asset, markers, markerLabel, markerNote, markerColor, markerTimestamp,
   markerXY, addingImageMarker, videoCurrentTime, isPending,
   onLabelChange, onNoteChange, onColorChange, onTimestampChange,
-  onToggleImageAdd, onSetCurrentTime, onSubmit, onDelete, onSeek, assetId,
+  onToggleImageAdd, onSetCurrentTime, onSubmit, onDelete, onSeek, labelRef, assetId,
 }: {
   asset: Asset
   markers: Marker[]
@@ -699,6 +701,7 @@ function MarkerTab({
   onSubmit: () => void
   onDelete: (id: number) => void
   onSeek: (t: number) => void
+  labelRef?: React.RefObject<HTMLInputElement>
   assetId: number
 }) {
   const isVideo = asset.asset_type === 'video' || asset.asset_type === 'audio'
@@ -778,6 +781,7 @@ function MarkerTab({
         <div>
           <label className="text-xs text-slate-500 mb-1 block">Etiket *</label>
           <input
+            ref={labelRef}
             className="input text-xs"
             placeholder="ör. Kesim noktası, Efekt ekle…"
             value={markerLabel}
@@ -912,123 +916,6 @@ function MarkerListItem({
       >
         <Trash2 size={11} />
       </button>
-    </div>
-  )
-}
-
-// ── VideoMarkerTimeline ───────────────────────────────────────────────────────
-
-function VideoMarkerTimeline({
-  markers, currentTime, duration, onSeek, onAddAtCurrent, onDeleteMarker,
-}: {
-  markers: Marker[]
-  currentTime: number
-  duration: number
-  onSeek: (t: number) => void
-  onAddAtCurrent: () => void
-  onDeleteMarker: (id: number) => void
-}) {
-  const timelineRef = useRef<HTMLDivElement>(null)
-  const [hoverTime, setHoverTime] = useState<number | null>(null)
-
-  const getTimeFromEvent = (e: React.MouseEvent) => {
-    if (!timelineRef.current || !duration) return null
-    const rect = timelineRef.current.getBoundingClientRect()
-    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
-    return ratio * duration
-  }
-
-  const handleClick = (e: React.MouseEvent) => {
-    const t = getTimeFromEvent(e)
-    if (t !== null) onSeek(t)
-  }
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    setHoverTime(getTimeFromEvent(e))
-  }
-
-  const videoMarkers = markers.filter((m) => m.timestamp !== undefined && m.timestamp !== null)
-
-  return (
-    <div className="px-4 pb-3 bg-black/30 border-t border-surface-300 shrink-0">
-      <div className="flex items-center justify-between mb-1.5 pt-2">
-        <span className="text-[10px] text-slate-500 font-mono">
-          {formatTimecode(currentTime)} / {duration > 0 ? formatTimecode(duration) : '--:--'}
-        </span>
-        <button
-          onClick={onAddAtCurrent}
-          className="flex items-center gap-1 text-[10px] text-brand-400 hover:text-brand-300 transition-colors"
-          title="Şu anki konuma marker ekle"
-        >
-          <Plus size={10} /> Marker Ekle
-        </button>
-      </div>
-
-      {/* Timeline şeridi */}
-      <div
-        ref={timelineRef}
-        className="relative h-7 bg-surface-200 rounded-md cursor-crosshair overflow-visible select-none"
-        onClick={handleClick}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={() => setHoverTime(null)}
-      >
-        {/* Oynatma ilerlemesi */}
-        {duration > 0 && (
-          <div
-            className="absolute top-0 left-0 h-full bg-brand-600/25 rounded-md pointer-events-none"
-            style={{ width: `${(currentTime / duration) * 100}%` }}
-          />
-        )}
-
-        {/* Oynatma kafası */}
-        {duration > 0 && (
-          <div
-            className="absolute top-0 h-full w-0.5 bg-white/80 pointer-events-none"
-            style={{ left: `${(currentTime / duration) * 100}%` }}
-          />
-        )}
-
-        {/* Marker pinleri */}
-        {duration > 0 && videoMarkers.map((m) => (
-          <div
-            key={m.id}
-            className="absolute top-0 h-full w-1 cursor-pointer group/pin hover:w-1.5 transition-all z-10"
-            style={{
-              left: `${((m.timestamp!) / duration) * 100}%`,
-              backgroundColor: MARKER_COLORS[m.color],
-            }}
-            onClick={(e) => { e.stopPropagation(); onSeek(m.timestamp!) }}
-            title={`${m.label} — ${formatTimecode(m.timestamp!)}`}
-          >
-            {/* Üst üçgen */}
-            <div
-              className="absolute -top-1 left-1/2 -translate-x-1/2 w-0 h-0"
-              style={{
-                borderLeft: '4px solid transparent',
-                borderRight: '4px solid transparent',
-                borderBottom: `6px solid ${MARKER_COLORS[m.color]}`,
-              }}
-            />
-            {/* Tooltip */}
-            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-surface-50 border border-surface-300 rounded-md px-2 py-1 opacity-0 group-hover/pin:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-20 shadow-lg">
-              <p className="text-[10px] font-medium text-white">{m.label}</p>
-              <p className="text-[10px] font-mono text-brand-400">{formatTimecode(m.timestamp!)}</p>
-            </div>
-          </div>
-        ))}
-
-        {/* Hover zamanı */}
-        {hoverTime !== null && duration > 0 && (
-          <div
-            className="absolute top-0 h-full w-px bg-white/40 pointer-events-none"
-            style={{ left: `${(hoverTime / duration) * 100}%` }}
-          >
-            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 bg-surface-50 border border-surface-300 rounded px-1.5 py-0.5 whitespace-nowrap">
-              <span className="text-[10px] font-mono text-slate-300">{formatTimecode(hoverTime)}</span>
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   )
 }

@@ -174,6 +174,19 @@
     letter-spacing: -0.01em;
   }
 
+  /* Video transport button */
+  .video-btn {
+    @apply w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all duration-150;
+    color: #8b9ab8;
+  }
+  .video-btn:hover {
+    background-color: rgba(255,255,255,0.07);
+    color: #e2e8f0;
+  }
+  .video-btn:active {
+    transform: scale(0.92);
+  }
+
   /* Glow accent border */
   .glow-border {
     box-shadow: 0 0 0 1px rgba(99,102,241,0.4), 0 0 16px rgba(99,102,241,0.2);
