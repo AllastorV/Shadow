@@ -43,6 +43,15 @@ export interface Asset {
   ai_objects?: string[]
   ai_colors?: string[]
   ai_transcript?: string
+  // Sinema/görsel sektör metadata
+  shot_scale?: string
+  camera_angle?: string
+  camera_movement?: string
+  lighting_type?: string
+  color_tone?: string
+  composition_tags?: string[]
+  subject_tags?: string[]
+  mood_tags?: string[]
   thumbnail_path?: string
   project_id: number
   uploader_id: number

@@ -151,8 +151,17 @@ def process_asset_ai(asset_id: int, file_path: str) -> None:
             asset.ai_description = analysis.get("description")
             asset.ai_tags = analysis.get("tags", [])
             asset.ai_scene_type = analysis.get("scene_type")
-            asset.ai_objects = analysis.get("objects", [])
-            asset.ai_colors = analysis.get("colors", [])
+            asset.ai_objects = analysis.get("ai_objects", [])
+            asset.ai_colors = analysis.get("ai_colors", [])
+            # Sinema alanları
+            asset.shot_scale = analysis.get("shot_scale")
+            asset.camera_angle = analysis.get("camera_angle")
+            asset.camera_movement = analysis.get("camera_movement")
+            asset.lighting_type = analysis.get("lighting_type")
+            asset.color_tone = analysis.get("color_tone")
+            asset.composition_tags = analysis.get("composition_tags", [])
+            asset.subject_tags = analysis.get("subject_tags", [])
+            asset.mood_tags = analysis.get("mood_tags", [])
 
             # Remove old AI-generated tags and insert fresh ones
             db.query(Tag).filter(Tag.asset_id == asset_id, Tag.is_ai_generated == True).delete()
@@ -338,6 +347,14 @@ def ai_search_assets(
             "scene_type": a.ai_scene_type or "",
             "objects": a.ai_objects or [],
             "type": a.asset_type,
+            # Sinema alanları — arama kalitesini artırır
+            "shot_scale": a.shot_scale or "",
+            "camera_angle": a.camera_angle or "",
+            "lighting_type": a.lighting_type or "",
+            "color_tone": a.color_tone or "",
+            "composition_tags": a.composition_tags or [],
+            "subject_tags": a.subject_tags or [],
+            "mood_tags": a.mood_tags or [],
         }
         for a in assets
     ]
@@ -413,8 +430,17 @@ def retag_asset(
         asset.ai_description = analysis.get("description")
         asset.ai_tags = analysis.get("tags", [])
         asset.ai_scene_type = analysis.get("scene_type")
-        asset.ai_objects = analysis.get("objects", [])
-        asset.ai_colors = analysis.get("colors", [])
+        asset.ai_objects = analysis.get("ai_objects", [])
+        asset.ai_colors = analysis.get("ai_colors", [])
+        # Sinema alanları
+        asset.shot_scale = analysis.get("shot_scale")
+        asset.camera_angle = analysis.get("camera_angle")
+        asset.camera_movement = analysis.get("camera_movement")
+        asset.lighting_type = analysis.get("lighting_type")
+        asset.color_tone = analysis.get("color_tone")
+        asset.composition_tags = analysis.get("composition_tags", [])
+        asset.subject_tags = analysis.get("subject_tags", [])
+        asset.mood_tags = analysis.get("mood_tags", [])
 
         db.query(Tag).filter(Tag.asset_id == asset_id, Tag.is_ai_generated == True).delete()
         for tag_name in (analysis.get("tags") or []):

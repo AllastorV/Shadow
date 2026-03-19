@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, List, Any
+from typing import Optional, List
 from datetime import datetime
 from ..models.asset import AssetType, AssetStatus
 
@@ -30,12 +30,25 @@ class AssetResponse(BaseModel):
     width: Optional[int] = None
     height: Optional[int] = None
     duration: Optional[float] = None
+
+    # Temel AI metadata
     ai_description: Optional[str] = None
     ai_tags: Optional[List[str]] = None
     ai_scene_type: Optional[str] = None
     ai_objects: Optional[List[str]] = None
     ai_colors: Optional[List[str]] = None
     ai_transcript: Optional[str] = None
+
+    # Sinematografi metadata
+    shot_scale: Optional[str] = None
+    camera_angle: Optional[str] = None
+    camera_movement: Optional[str] = None
+    lighting_type: Optional[str] = None
+    color_tone: Optional[str] = None
+    composition_tags: Optional[List[str]] = None
+    subject_tags: Optional[List[str]] = None
+    mood_tags: Optional[List[str]] = None
+
     thumbnail_path: Optional[str] = None
     project_id: int
     uploader_id: int

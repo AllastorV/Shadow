@@ -246,16 +246,82 @@ export default function AssetDetailPage() {
                 </div>
               </div>
 
-              {/* Scene & Objects */}
-              {asset.ai_scene_type && (
+              {/* ── Sinematografi Bilgileri ── */}
+              {(asset.shot_scale || asset.camera_angle || asset.camera_movement ||
+                asset.lighting_type || asset.color_tone) && (
                 <div>
-                  <p className="text-xs font-medium text-slate-500 mb-2">Scene Type</p>
-                  <span className="badge bg-purple-500/20 text-purple-300">{asset.ai_scene_type}</span>
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                    <span>🎬</span> Sinematografi
+                  </p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {asset.shot_scale && asset.shot_scale !== 'unknown' && (
+                      <CineField label="Çekim Ölçeği" value={SHOT_SCALE_LABELS[asset.shot_scale] ?? asset.shot_scale} color="bg-violet-500/20 text-violet-300" />
+                    )}
+                    {asset.camera_angle && asset.camera_angle !== 'unknown' && (
+                      <CineField label="Kamera Açısı" value={CAMERA_ANGLE_LABELS[asset.camera_angle] ?? asset.camera_angle} color="bg-blue-500/20 text-blue-300" />
+                    )}
+                    {asset.camera_movement && asset.camera_movement !== 'unknown' && (
+                      <CineField label="Kamera Hareketi" value={CAMERA_MOVEMENT_LABELS[asset.camera_movement] ?? asset.camera_movement} color="bg-cyan-500/20 text-cyan-300" />
+                    )}
+                    {asset.lighting_type && (
+                      <CineField label="Işık" value={LIGHTING_LABELS[asset.lighting_type] ?? asset.lighting_type} color="bg-amber-500/20 text-amber-300" />
+                    )}
+                    {asset.color_tone && (
+                      <CineField label="Renk Tonu" value={COLOR_TONE_LABELS[asset.color_tone] ?? asset.color_tone} color="bg-pink-500/20 text-pink-300" />
+                    )}
+                    {asset.ai_scene_type && (
+                      <CineField label="Mekan" value={SCENE_TYPE_LABELS[asset.ai_scene_type] ?? asset.ai_scene_type} color="bg-teal-500/20 text-teal-300" />
+                    )}
+                  </div>
                 </div>
               )}
+
+              {/* Kompozisyon */}
+              {asset.composition_tags && asset.composition_tags.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-slate-500 mb-2">Kompozisyon</p>
+                  <div className="flex flex-wrap gap-1">
+                    {asset.composition_tags.map((c) => (
+                      <span key={c} className="badge bg-indigo-500/20 text-indigo-300">
+                        {COMPOSITION_LABELS[c] ?? c}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Konu/Özne */}
+              {asset.subject_tags && asset.subject_tags.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-slate-500 mb-2">Konu / Özne</p>
+                  <div className="flex flex-wrap gap-1">
+                    {asset.subject_tags.map((s) => (
+                      <span key={s} className="badge bg-emerald-500/20 text-emerald-300">
+                        {SUBJECT_LABELS[s] ?? s}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Atmosfer */}
+              {asset.mood_tags && asset.mood_tags.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-slate-500 mb-2">Atmosfer / Duygu</p>
+                  <div className="flex flex-wrap gap-1">
+                    {asset.mood_tags.map((m) => (
+                      <span key={m} className="badge bg-rose-500/20 text-rose-300">
+                        {MOOD_LABELS[m] ?? m}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Nesneler */}
               {asset.ai_objects && asset.ai_objects.length > 0 && (
                 <div>
-                  <p className="text-xs font-medium text-slate-500 mb-2">Detected Objects</p>
+                  <p className="text-xs font-medium text-slate-500 mb-2">Tespit Edilen</p>
                   <div className="flex flex-wrap gap-1">
                     {asset.ai_objects.map((obj) => (
                       <span key={obj} className="badge bg-surface-200 text-slate-400">{obj}</span>
@@ -265,7 +331,7 @@ export default function AssetDetailPage() {
               )}
               {asset.ai_colors && asset.ai_colors.length > 0 && (
                 <div>
-                  <p className="text-xs font-medium text-slate-500 mb-2">Colors</p>
+                  <p className="text-xs font-medium text-slate-500 mb-2">Renkler</p>
                   <div className="flex flex-wrap gap-1">
                     {asset.ai_colors.map((c) => (
                       <span key={c} className="badge bg-surface-200 text-slate-400">{c}</span>
@@ -428,4 +494,141 @@ function StatusBadge({ status }: { status: string }) {
   }
   const c = config[status] || config.ready
   return <span className={c.className}>{c.label}</span>
+}
+
+function CineField({ label, value, color }: { label: string; value: string; color: string }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[10px] text-slate-600 uppercase tracking-wide">{label}</span>
+      <span className={`badge ${color} text-xs`}>{value}</span>
+    </div>
+  )
+}
+
+// ── Türkçe etiket haritaları ──────────────────────────────────────────────────
+
+const SHOT_SCALE_LABELS: Record<string, string> = {
+  extreme_close_up: 'Aşırı Yakın Plan',
+  close_up: 'Yakın Plan',
+  medium_close_up: 'Orta Yakın Plan',
+  medium_shot: 'Orta Plan',
+  medium_wide: 'Orta Geniş Plan',
+  full_shot: 'Tam Plan',
+  wide_shot: 'Geniş Plan',
+  extreme_wide: 'Aşırı Geniş Plan',
+  aerial: 'Hava Çekimi',
+  insert: 'Detay / Insert',
+}
+
+const CAMERA_ANGLE_LABELS: Record<string, string> = {
+  eye_level: 'Göz Hizası',
+  low_angle: 'Alçak Açı',
+  high_angle: 'Yüksek Açı',
+  dutch_angle: 'Dutch Açı',
+  birds_eye: 'Kuş Bakışı',
+  worms_eye: 'Böcek Bakışı',
+  over_shoulder: 'Omuz Üstü',
+  pov: 'POV',
+}
+
+const CAMERA_MOVEMENT_LABELS: Record<string, string> = {
+  static: 'Sabit',
+  pan: 'Pan',
+  tilt: 'Tilt',
+  dolly: 'Dolly',
+  tracking: 'Takip',
+  handheld: 'El Kamerası',
+  aerial_move: 'Drone',
+  zoom: 'Zoom',
+  crane: 'Vinç',
+  steadicam: 'Steadicam',
+}
+
+const LIGHTING_LABELS: Record<string, string> = {
+  natural: 'Doğal Işık',
+  golden_hour: 'Altın Saat',
+  blue_hour: 'Mavi Saat',
+  overcast: 'Bulutlu / Yumuşak',
+  high_key: 'High Key',
+  low_key: 'Low Key',
+  backlit: 'Arka Işık',
+  silhouette: 'Siluet',
+  studio: 'Stüdyo',
+  practical: 'Pratik Işık',
+  mixed: 'Karma',
+  neon: 'Neon',
+  night: 'Gece',
+}
+
+const COLOR_TONE_LABELS: Record<string, string> = {
+  warm: 'Sıcak',
+  cool: 'Soğuk',
+  neutral: 'Nötr',
+  desaturated: 'Soluk / Desatüre',
+  high_contrast: 'Yüksek Kontrast',
+  low_contrast: 'Düşük Kontrast',
+  teal_orange: 'Teal & Orange',
+  black_white: 'Siyah Beyaz',
+  vintage: 'Vintage',
+  vibrant: 'Canlı',
+  muted: 'Pastel / Muted',
+}
+
+const COMPOSITION_LABELS: Record<string, string> = {
+  rule_of_thirds: 'Üçler Kuralı',
+  symmetrical: 'Simetri',
+  leading_lines: 'Yönlendirici Çizgi',
+  framing: 'Çerçeveleme',
+  bokeh: 'Bokeh',
+  deep_focus: 'Derin Odak',
+  negative_space: 'Negatif Alan',
+  foreground_depth: 'Ön Plan Derinliği',
+  center_composition: 'Merkez Kompozisyon',
+  diagonal: 'Diagonal',
+}
+
+const SUBJECT_LABELS: Record<string, string> = {
+  portrait: 'Portre',
+  group: 'Grup',
+  crowd: 'Kalabalık',
+  nature: 'Doğa',
+  urban: 'Kentsel',
+  architecture: 'Mimari',
+  vehicle: 'Araç',
+  animal: 'Hayvan',
+  product: 'Ürün',
+  food: 'Yiyecek',
+  abstract: 'Soyut',
+  event: 'Etkinlik',
+  sport: 'Spor',
+  performance: 'Performans',
+  interview: 'Röportaj',
+  broll: 'B-Roll',
+  aerial_view: 'Hava Görüntüsü',
+  underwater: 'Su Altı',
+}
+
+const MOOD_LABELS: Record<string, string> = {
+  dramatic: 'Dramatik',
+  peaceful: 'Sakin / Huzurlu',
+  tense: 'Gerilimli',
+  romantic: 'Romantik',
+  melancholic: 'Melankolik',
+  epic: 'Epik',
+  intimate: 'Samimi / İçten',
+  mysterious: 'Gizemli',
+  energetic: 'Enerjik',
+  dark: 'Karanlık',
+  joyful: 'Neşeli',
+  nostalgic: 'Nostaljik',
+  documentary: 'Belgesel',
+  commercial: 'Ticari / Reklam',
+}
+
+const SCENE_TYPE_LABELS: Record<string, string> = {
+  interior: 'İç Mekan',
+  exterior: 'Dış Mekan',
+  studio: 'Stüdyo',
+  location: 'Lokasyon',
+  green_screen: 'Yeşil Perde',
 }

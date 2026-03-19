@@ -38,13 +38,46 @@ class Asset(Base):
     height = Column(Integer, nullable=True)
     duration = Column(Float, nullable=True)  # seconds, for video/audio
 
-    # AI-generated metadata
+    # --- Temel AI metadata ---
     ai_description = Column(Text, nullable=True)
-    ai_tags = Column(JSON, nullable=True)  # list of strings
-    ai_scene_type = Column(String, nullable=True)
-    ai_objects = Column(JSON, nullable=True)  # detected objects
-    ai_colors = Column(JSON, nullable=True)  # dominant colors
-    ai_transcript = Column(Text, nullable=True)  # for audio/video
+    ai_tags = Column(JSON, nullable=True)           # genel tag listesi
+    ai_scene_type = Column(String, nullable=True)   # iç/dış/stüdyo vb.
+    ai_objects = Column(JSON, nullable=True)         # tespit edilen nesneler/kişiler
+    ai_colors = Column(JSON, nullable=True)          # baskın renkler
+    ai_transcript = Column(Text, nullable=True)      # ses/video transkripti
+
+    # --- Sinematografi metadata ---
+    # Çekim ölçeği: extreme_close_up, close_up, medium_close_up, medium_shot,
+    #               medium_wide, wide_shot, extreme_wide, full_shot, aerial, unknown
+    shot_scale = Column(String, nullable=True)
+
+    # Kamera açısı: eye_level, low_angle, high_angle, dutch_angle,
+    #               birds_eye, worms_eye, unknown
+    camera_angle = Column(String, nullable=True)
+
+    # Kamera hareketi: static, pan, tilt, dolly, tracking,
+    #                  handheld, aerial_move, zoom, unknown
+    camera_movement = Column(String, nullable=True)
+
+    # Işık türü: natural, golden_hour, blue_hour, high_key, low_key,
+    #            backlit, silhouette, studio, practical, mixed
+    lighting_type = Column(String, nullable=True)
+
+    # Renk tonu: warm, cool, neutral, desaturated, high_contrast,
+    #            low_contrast, teal_orange, black_white, vintage
+    color_tone = Column(String, nullable=True)
+
+    # Kompozisyon etiketleri (birden fazla olabilir)
+    # Örn: ["rule_of_thirds", "bokeh", "symmetrical", "leading_lines"]
+    composition_tags = Column(JSON, nullable=True)
+
+    # Konu/özne etiketleri
+    # Örn: ["portrait", "crowd", "vehicle", "architecture", "landscape"]
+    subject_tags = Column(JSON, nullable=True)
+
+    # Atmosfer/duygu etiketleri
+    # Örn: ["dramatic", "peaceful", "tense", "romantic", "documentary"]
+    mood_tags = Column(JSON, nullable=True)
 
     # Thumbnail
     thumbnail_path = Column(String, nullable=True)
