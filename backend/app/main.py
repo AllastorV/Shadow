@@ -9,7 +9,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from .database import Base, engine
-from .routers import auth, projects, assets, comments, share
+from .routers import auth, projects, assets, comments, share, markers
 from .config import settings
 
 # Tablo oluştur
@@ -113,6 +113,7 @@ app.include_router(projects.router, prefix="/api/v1")
 app.include_router(assets.router, prefix="/api/v1")
 app.include_router(comments.router, prefix="/api/v1")
 app.include_router(share.router, prefix="/api/v1")
+app.include_router(markers.router, prefix="/api/v1")
 
 
 @app.get("/api/v1/health")

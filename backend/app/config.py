@@ -43,9 +43,14 @@ class Settings(BaseSettings):
     RATE_LIMIT_PER_MINUTE: int = 60
     # Allowed file extensions (security whitelist)
     ALLOWED_EXTENSIONS: set = {
+        # Görseller
         ".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif",
+        ".tif", ".tiff",           # TIFF — profesyonel fotoğrafçılık
+        # Videolar (H.264/H.265 MP4/MOV container dahil)
         ".mp4", ".mov", ".avi", ".mkv", ".webm",
+        # Ses
         ".mp3", ".wav", ".ogg", ".m4a", ".flac",
+        # Belgeler
         ".pdf",
     }
 

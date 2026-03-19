@@ -94,6 +94,26 @@ export interface ShareLink {
   created_at: string
 }
 
+export type MarkerColor = 'red' | 'green' | 'blue' | 'yellow' | 'purple' | 'orange' | 'cyan'
+
+export interface Marker {
+  id: number
+  label: string
+  note?: string
+  color: MarkerColor
+  /** Video markeri: saniye cinsinden zaman damgası */
+  timestamp?: number
+  /** Aralık markeri süresi (saniye, 0 = an markeri) */
+  duration_sec?: number
+  /** Gorsel markeri: X konumu (%) */
+  x_pos?: number
+  /** Gorsel markeri: Y konumu (%) */
+  y_pos?: number
+  asset_id: number
+  created_by_id: number
+  created_at: string
+}
+
 export interface AuthState {
   user: User | null
   token: string | null

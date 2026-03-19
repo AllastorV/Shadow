@@ -1,20 +1,40 @@
-import { useState } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Tag, Sparkles, CheckCircle, XCircle, Clock, Download,
   Share2, MessageSquare, Image, Video, Music, FileText,
   Loader2, Link2, Lock, Calendar, Eye, Copy, CheckCheck,
-  Trash2, DownloadCloud,
+  Trash2, DownloadCloud, MapPin, Plus, FileCode2, Film,
+  ChevronRight,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../utils/api'
-import type { Asset, Comment, ShareLink } from '../types'
+import type { Asset, Comment, ShareLink, Marker, MarkerColor } from '../types'
 import { formatFileSize, formatDate, formatRelative } from '../utils/format'
 import { useAuthStore } from '../store/auth'
 import clsx from 'clsx'
 
-type Tab = 'info' | 'comments' | 'share'
+type Tab = 'info' | 'comments' | 'share' | 'markers'
+
+// ── Marker renk tanımları ─────────────────────────────────────────────────────
+const MARKER_COLORS: Record<MarkerColor, string> = {
+  red: '#ef4444', green: '#22c55e', blue: '#3b82f6',
+  yellow: '#eab308', purple: '#a855f7', orange: '#f97316', cyan: '#06b6d4',
+}
+const MARKER_COLOR_LABELS: Record<MarkerColor, string> = {
+  red: 'Kırmızı', green: 'Yeşil', blue: 'Mavi',
+  yellow: 'Sarı', purple: 'Mor', orange: 'Turuncu', cyan: 'Cam Göbeği',
+}
+
+function formatTimecode(sec: number): string {
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  const s = Math.floor(sec % 60)
+  const ms = Math.floor((sec % 1) * 1000)
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(ms).padStart(3, '0')}`
+}
 
 export default function AssetDetailPage() {
   const { projectId, assetId } = useParams()
@@ -27,6 +47,17 @@ export default function AssetDetailPage() {
   const [shareLabel, setShareLabel] = useState('')
   const [sharePassword, setSharePassword] = useState('')
   const [shareExpiry, setShareExpiry] = useState('')
+
+  // Marker state
+  const [markerLabel, setMarkerLabel] = useState('')
+  const [markerNote, setMarkerNote] = useState('')
+  const [markerColor, setMarkerColor] = useState<MarkerColor>('red')
+  const [markerTimestamp, setMarkerTimestamp] = useState<number | null>(null)
+  const [markerXY, setMarkerXY] = useState<{ x: number; y: number } | null>(null)
+  const [addingImageMarker, setAddingImageMarker] = useState(false)
+  const [videoCurrentTime, setVideoCurrentTime] = useState(0)
+  const [videoDuration, setVideoDuration] = useState(0)
+  const videoRef = useRef<HTMLVideoElement>(null)
 
   const { data: asset, isLoading } = useQuery<Asset>({
     queryKey: ['asset', assetId],
@@ -43,6 +74,38 @@ export default function AssetDetailPage() {
     queryKey: ['shareLinks', assetId],
     queryFn: () => api.get(`/share/asset/${assetId}`).then((r) => r.data),
     enabled: tab === 'share',
+  })
+
+  const { data: markers = [] } = useQuery<Marker[]>({
+    queryKey: ['markers', assetId],
+    queryFn: () => api.get(`/markers/asset/${assetId}`).then((r) => r.data),
+    enabled: tab === 'markers',
+    staleTime: 30_000,
+  })
+
+  const createMarkerMutation = useMutation({
+    mutationFn: (payload: object) =>
+      api.post(`/markers/asset/${assetId}`, payload).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['markers', assetId] })
+      toast.success('Marker eklendi!')
+      setMarkerLabel('')
+      setMarkerNote('')
+      setMarkerColor('red')
+      setMarkerTimestamp(null)
+      setMarkerXY(null)
+      setAddingImageMarker(false)
+    },
+    onError: () => toast.error('Marker eklenemedi'),
+  })
+
+  const deleteMarkerMutation = useMutation({
+    mutationFn: (markerId: number) => api.delete(`/markers/${markerId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['markers', assetId] })
+      toast.success('Marker silindi')
+    },
+    onError: () => toast.error('Silme başarısız'),
   })
 
   const aiTagMutation = useMutation({
@@ -165,24 +228,64 @@ export default function AssetDetailPage() {
         </div>
 
         {/* Preview */}
-        <div className="flex-1 flex items-center justify-center bg-black/20 p-4 overflow-hidden">
-          {asset.asset_type === 'image' && (
-            <img src={assetUrl} alt={asset.original_name} className="max-w-full max-h-full object-contain rounded-lg" />
-          )}
-          {asset.asset_type === 'video' && (
-            <video src={assetUrl} controls className="max-w-full max-h-full rounded-lg" />
-          )}
-          {asset.asset_type === 'audio' && (
-            <div className="text-center">
-              <Music size={64} className="text-slate-600 mx-auto mb-4" />
-              <audio src={assetUrl} controls className="w-64" />
-            </div>
-          )}
-          {(asset.asset_type === 'document' || asset.asset_type === 'other') && (
-            <div className="text-center text-slate-500">
-              <FileText size={64} className="mx-auto mb-3" />
-              <p className="text-sm">{asset.mime_type}</p>
-            </div>
+        <div className="flex-1 flex flex-col bg-black/20 overflow-hidden">
+          <div className="flex-1 flex items-center justify-center p-4 overflow-hidden relative">
+            {asset.asset_type === 'image' && tab === 'markers' ? (
+              /* Gorsel marker modu: tıklayarak marker ekle */
+              <ImageMarkerOverlay
+                src={assetUrl}
+                markers={markers}
+                adding={addingImageMarker}
+                onImageClick={(x, y) => {
+                  setMarkerXY({ x, y })
+                  setMarkerTimestamp(null)
+                  setAddingImageMarker(false)
+                }}
+                onMarkerClick={(m) => {
+                  if (window.confirm(`"${m.label}" markerını silmek istiyor musunuz?`)) {
+                    deleteMarkerMutation.mutate(m.id)
+                  }
+                }}
+              />
+            ) : asset.asset_type === 'image' ? (
+              <img src={assetUrl} alt={asset.original_name} className="max-w-full max-h-full object-contain rounded-lg" />
+            ) : asset.asset_type === 'video' ? (
+              <video
+                ref={videoRef}
+                src={assetUrl}
+                controls
+                className="max-w-full max-h-full rounded-lg"
+                onTimeUpdate={() => setVideoCurrentTime(videoRef.current?.currentTime ?? 0)}
+                onLoadedMetadata={() => setVideoDuration(videoRef.current?.duration ?? 0)}
+              />
+            ) : asset.asset_type === 'audio' ? (
+              <div className="text-center">
+                <Music size={64} className="text-slate-600 mx-auto mb-4" />
+                <audio src={assetUrl} controls className="w-64" />
+              </div>
+            ) : (
+              <div className="text-center text-slate-500">
+                <FileText size={64} className="mx-auto mb-3" />
+                <p className="text-sm">{asset.mime_type}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Video marker timeline — yalnızca markers tabında göster */}
+          {asset.asset_type === 'video' && tab === 'markers' && (
+            <VideoMarkerTimeline
+              markers={markers}
+              currentTime={videoCurrentTime}
+              duration={videoDuration}
+              onSeek={(t) => {
+                if (videoRef.current) videoRef.current.currentTime = t
+              }}
+              onAddAtCurrent={() => {
+                setMarkerTimestamp(videoCurrentTime)
+                setMarkerXY(null)
+              }}
+              onDeleteMarker={(id) => deleteMarkerMutation.mutate(id)}
+            />
           )}
         </div>
       </div>
@@ -193,6 +296,7 @@ export default function AssetDetailPage() {
         <div className="flex border-b border-surface-300">
           {([
             { id: 'info', label: 'Bilgi' },
+            { id: 'markers', label: `Marker${markers.length ? ` (${markers.length})` : ''}` },
             { id: 'comments', label: `Yorum${asset.comment_count ? ` (${asset.comment_count})` : ''}` },
             { id: 'share', label: 'Paylaş' },
           ] as { id: Tab; label: string }[]).map((t) => (
@@ -416,6 +520,44 @@ export default function AssetDetailPage() {
             </>
           )}
 
+          {/* MARKERS TAB */}
+          {tab === 'markers' && (
+            <MarkerTab
+              asset={asset}
+              markers={markers}
+              markerLabel={markerLabel}
+              markerNote={markerNote}
+              markerColor={markerColor}
+              markerTimestamp={markerTimestamp}
+              markerXY={markerXY}
+              addingImageMarker={addingImageMarker}
+              videoCurrentTime={videoCurrentTime}
+              isPending={createMarkerMutation.isPending}
+              onLabelChange={setMarkerLabel}
+              onNoteChange={setMarkerNote}
+              onColorChange={setMarkerColor}
+              onTimestampChange={setMarkerTimestamp}
+              onToggleImageAdd={() => setAddingImageMarker((v) => !v)}
+              onSetCurrentTime={() => setMarkerTimestamp(videoCurrentTime)}
+              onSubmit={() => {
+                if (!markerLabel.trim()) { toast.error('Marker etiketi gerekli'); return }
+                createMarkerMutation.mutate({
+                  label: markerLabel.trim(),
+                  note: markerNote.trim() || null,
+                  color: markerColor,
+                  timestamp: markerTimestamp ?? undefined,
+                  x_pos: markerXY?.x ?? undefined,
+                  y_pos: markerXY?.y ?? undefined,
+                })
+              }}
+              onDelete={(id) => deleteMarkerMutation.mutate(id)}
+              onSeek={(t) => {
+                if (videoRef.current) videoRef.current.currentTime = t
+              }}
+              assetId={Number(assetId)}
+            />
+          )}
+
           {/* SHARE TAB */}
           {tab === 'share' && (
             <>
@@ -490,6 +632,430 @@ export default function AssetDetailPage() {
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── MarkerTab ─────────────────────────────────────────────────────────────────
+
+function MarkerTab({
+  asset, markers, markerLabel, markerNote, markerColor, markerTimestamp,
+  markerXY, addingImageMarker, videoCurrentTime, isPending,
+  onLabelChange, onNoteChange, onColorChange, onTimestampChange,
+  onToggleImageAdd, onSetCurrentTime, onSubmit, onDelete, onSeek, assetId,
+}: {
+  asset: Asset
+  markers: Marker[]
+  markerLabel: string
+  markerNote: string
+  markerColor: MarkerColor
+  markerTimestamp: number | null
+  markerXY: { x: number; y: number } | null
+  addingImageMarker: boolean
+  videoCurrentTime: number
+  isPending: boolean
+  onLabelChange: (v: string) => void
+  onNoteChange: (v: string) => void
+  onColorChange: (v: MarkerColor) => void
+  onTimestampChange: (v: number | null) => void
+  onToggleImageAdd: () => void
+  onSetCurrentTime: () => void
+  onSubmit: () => void
+  onDelete: (id: number) => void
+  onSeek: (t: number) => void
+  assetId: number
+}) {
+  const isVideo = asset.asset_type === 'video' || asset.asset_type === 'audio'
+  const isImage = asset.asset_type === 'image'
+
+  return (
+    <>
+      {/* Mevcut markerlar */}
+      {markers.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+            Markerlar ({markers.length})
+          </p>
+          {markers.map((m) => (
+            <MarkerListItem
+              key={m.id}
+              marker={m}
+              onDelete={() => onDelete(m.id)}
+              onSeek={isVideo ? () => onSeek(m.timestamp!) : undefined}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Yeni marker formu */}
+      <div className={clsx('space-y-3', markers.length > 0 && 'border-t border-surface-300 pt-4')}>
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide flex items-center gap-1.5">
+          <Plus size={10} /> Marker Ekle
+        </p>
+
+        {/* Video: zaman damgası */}
+        {isVideo && (
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">Zaman Damgası</label>
+            <div className="flex gap-2">
+              <div className="flex-1 bg-surface-200 rounded-lg px-3 py-2 text-xs font-mono text-white">
+                {markerTimestamp !== null
+                  ? formatTimecode(markerTimestamp)
+                  : <span className="text-slate-500">Seçilmedi</span>}
+              </div>
+              <button
+                onClick={onSetCurrentTime}
+                className="btn-ghost text-xs px-2 py-1"
+                title="Şu anki pozisyonu kullan"
+              >
+                <Film size={12} /> Şimdiki
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-600 mt-1">
+              Videoda oynama başlatıp "Şimdiki" butonuna basın, veya aşağıdaki timeline'a tıklayın.
+            </p>
+          </div>
+        )}
+
+        {/* Gorsel: konumu butonu */}
+        {isImage && (
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">Konum</label>
+            <button
+              onClick={onToggleImageAdd}
+              className={clsx(
+                'btn-ghost text-xs w-full justify-center',
+                addingImageMarker && 'bg-brand-600/20 text-brand-400 border-brand-500/30'
+              )}
+            >
+              <MapPin size={12} />
+              {addingImageMarker
+                ? 'Görüntüye tıklayın…'
+                : markerXY
+                  ? `X: ${markerXY.x.toFixed(1)}% Y: ${markerXY.y.toFixed(1)}%`
+                  : 'Görüntüde konum seç'}
+            </button>
+          </div>
+        )}
+
+        {/* Etiket */}
+        <div>
+          <label className="text-xs text-slate-500 mb-1 block">Etiket *</label>
+          <input
+            className="input text-xs"
+            placeholder="ör. Kesim noktası, Efekt ekle…"
+            value={markerLabel}
+            onChange={(e) => onLabelChange(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && onSubmit()}
+          />
+        </div>
+
+        {/* Not */}
+        <div>
+          <label className="text-xs text-slate-500 mb-1 block">Not (isteğe bağlı)</label>
+          <textarea
+            className="input text-xs resize-none"
+            rows={2}
+            placeholder="Detay veya talimatlar…"
+            value={markerNote}
+            onChange={(e) => onNoteChange(e.target.value)}
+          />
+        </div>
+
+        {/* Renk */}
+        <div>
+          <label className="text-xs text-slate-500 mb-1.5 block">Renk</label>
+          <div className="flex gap-1.5 flex-wrap">
+            {(Object.keys(MARKER_COLORS) as MarkerColor[]).map((c) => (
+              <button
+                key={c}
+                onClick={() => onColorChange(c)}
+                title={MARKER_COLOR_LABELS[c]}
+                className={clsx(
+                  'w-6 h-6 rounded-full transition-all',
+                  markerColor === c ? 'ring-2 ring-white ring-offset-2 ring-offset-surface-100 scale-110' : 'hover:scale-105'
+                )}
+                style={{ backgroundColor: MARKER_COLORS[c] }}
+              />
+            ))}
+          </div>
+        </div>
+
+        <button
+          onClick={onSubmit}
+          disabled={isPending || !markerLabel.trim()}
+          className="btn-primary w-full justify-center"
+        >
+          <MapPin size={13} />
+          {isPending ? 'Ekleniyor…' : 'Marker Ekle'}
+        </button>
+      </div>
+
+      {/* Export */}
+      {markers.length > 0 && (
+        <div className="border-t border-surface-300 pt-4 space-y-2">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide flex items-center gap-1.5">
+            <FileCode2 size={10} /> Dışa Aktar
+          </p>
+          <a
+            href={`/api/v1/markers/asset/${assetId}/export/xmp`}
+            download
+            className="btn-ghost text-xs w-full justify-between"
+          >
+            <span className="flex items-center gap-1.5">
+              <FileCode2 size={11} className="text-orange-400" />
+              Premiere Pro (.xmp)
+            </span>
+            <Download size={10} />
+          </a>
+          {isVideo && (
+            <a
+              href={`/api/v1/markers/asset/${assetId}/export/fcpxml`}
+              download
+              className="btn-ghost text-xs w-full justify-between"
+            >
+              <span className="flex items-center gap-1.5">
+                <FileCode2 size={11} className="text-blue-400" />
+                DaVinci / FCP (.fcpxml)
+              </span>
+              <Download size={10} />
+            </a>
+          )}
+          <p className="text-[10px] text-slate-600 leading-relaxed">
+            Premiere: .xmp dosyasını medya dosyasıyla aynı klasöre koyun.
+            {isVideo && ' DaVinci: File → Import → Timeline ile .fcpxml dosyasını yükleyin.'}
+          </p>
+        </div>
+      )}
+    </>
+  )
+}
+
+// ── MarkerListItem ────────────────────────────────────────────────────────────
+
+function MarkerListItem({
+  marker, onDelete, onSeek,
+}: {
+  marker: Marker
+  onDelete: () => void
+  onSeek?: () => void
+}) {
+  return (
+    <div className="flex items-start gap-2 p-2.5 rounded-lg bg-surface-100 hover:bg-surface-200 transition-colors group">
+      {/* Renk oku */}
+      <div
+        className="w-2.5 h-2.5 rounded-full mt-0.5 shrink-0"
+        style={{ backgroundColor: MARKER_COLORS[marker.color] }}
+      />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-medium text-slate-200 truncate">{marker.label}</span>
+          {marker.timestamp !== undefined && marker.timestamp !== null && (
+            <button
+              onClick={onSeek}
+              className="text-[10px] font-mono text-brand-400 hover:text-brand-300 shrink-0"
+              title="Bu konuma git"
+            >
+              {formatTimecode(marker.timestamp)}
+            </button>
+          )}
+          {marker.x_pos !== undefined && marker.x_pos !== null && (
+            <span className="text-[10px] text-slate-500 font-mono shrink-0">
+              {marker.x_pos.toFixed(1)}%, {marker.y_pos?.toFixed(1)}%
+            </span>
+          )}
+        </div>
+        {marker.note && (
+          <p className="text-xs text-slate-500 truncate mt-0.5">{marker.note}</p>
+        )}
+      </div>
+      <button
+        onClick={onDelete}
+        className="opacity-0 group-hover:opacity-100 p-1 text-slate-600 hover:text-red-400 transition-all"
+        title="Sil"
+      >
+        <Trash2 size={11} />
+      </button>
+    </div>
+  )
+}
+
+// ── VideoMarkerTimeline ───────────────────────────────────────────────────────
+
+function VideoMarkerTimeline({
+  markers, currentTime, duration, onSeek, onAddAtCurrent, onDeleteMarker,
+}: {
+  markers: Marker[]
+  currentTime: number
+  duration: number
+  onSeek: (t: number) => void
+  onAddAtCurrent: () => void
+  onDeleteMarker: (id: number) => void
+}) {
+  const timelineRef = useRef<HTMLDivElement>(null)
+  const [hoverTime, setHoverTime] = useState<number | null>(null)
+
+  const getTimeFromEvent = (e: React.MouseEvent) => {
+    if (!timelineRef.current || !duration) return null
+    const rect = timelineRef.current.getBoundingClientRect()
+    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+    return ratio * duration
+  }
+
+  const handleClick = (e: React.MouseEvent) => {
+    const t = getTimeFromEvent(e)
+    if (t !== null) onSeek(t)
+  }
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    setHoverTime(getTimeFromEvent(e))
+  }
+
+  const videoMarkers = markers.filter((m) => m.timestamp !== undefined && m.timestamp !== null)
+
+  return (
+    <div className="px-4 pb-3 bg-black/30 border-t border-surface-300 shrink-0">
+      <div className="flex items-center justify-between mb-1.5 pt-2">
+        <span className="text-[10px] text-slate-500 font-mono">
+          {formatTimecode(currentTime)} / {duration > 0 ? formatTimecode(duration) : '--:--'}
+        </span>
+        <button
+          onClick={onAddAtCurrent}
+          className="flex items-center gap-1 text-[10px] text-brand-400 hover:text-brand-300 transition-colors"
+          title="Şu anki konuma marker ekle"
+        >
+          <Plus size={10} /> Marker Ekle
+        </button>
+      </div>
+
+      {/* Timeline şeridi */}
+      <div
+        ref={timelineRef}
+        className="relative h-7 bg-surface-200 rounded-md cursor-crosshair overflow-visible select-none"
+        onClick={handleClick}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={() => setHoverTime(null)}
+      >
+        {/* Oynatma ilerlemesi */}
+        {duration > 0 && (
+          <div
+            className="absolute top-0 left-0 h-full bg-brand-600/25 rounded-md pointer-events-none"
+            style={{ width: `${(currentTime / duration) * 100}%` }}
+          />
+        )}
+
+        {/* Oynatma kafası */}
+        {duration > 0 && (
+          <div
+            className="absolute top-0 h-full w-0.5 bg-white/80 pointer-events-none"
+            style={{ left: `${(currentTime / duration) * 100}%` }}
+          />
+        )}
+
+        {/* Marker pinleri */}
+        {duration > 0 && videoMarkers.map((m) => (
+          <div
+            key={m.id}
+            className="absolute top-0 h-full w-1 cursor-pointer group/pin hover:w-1.5 transition-all z-10"
+            style={{
+              left: `${((m.timestamp!) / duration) * 100}%`,
+              backgroundColor: MARKER_COLORS[m.color],
+            }}
+            onClick={(e) => { e.stopPropagation(); onSeek(m.timestamp!) }}
+            title={`${m.label} — ${formatTimecode(m.timestamp!)}`}
+          >
+            {/* Üst üçgen */}
+            <div
+              className="absolute -top-1 left-1/2 -translate-x-1/2 w-0 h-0"
+              style={{
+                borderLeft: '4px solid transparent',
+                borderRight: '4px solid transparent',
+                borderBottom: `6px solid ${MARKER_COLORS[m.color]}`,
+              }}
+            />
+            {/* Tooltip */}
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-surface-50 border border-surface-300 rounded-md px-2 py-1 opacity-0 group-hover/pin:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-20 shadow-lg">
+              <p className="text-[10px] font-medium text-white">{m.label}</p>
+              <p className="text-[10px] font-mono text-brand-400">{formatTimecode(m.timestamp!)}</p>
+            </div>
+          </div>
+        ))}
+
+        {/* Hover zamanı */}
+        {hoverTime !== null && duration > 0 && (
+          <div
+            className="absolute top-0 h-full w-px bg-white/40 pointer-events-none"
+            style={{ left: `${(hoverTime / duration) * 100}%` }}
+          >
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 bg-surface-50 border border-surface-300 rounded px-1.5 py-0.5 whitespace-nowrap">
+              <span className="text-[10px] font-mono text-slate-300">{formatTimecode(hoverTime)}</span>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── ImageMarkerOverlay ────────────────────────────────────────────────────────
+
+function ImageMarkerOverlay({
+  src, markers, adding, onImageClick, onMarkerClick,
+}: {
+  src: string
+  markers: Marker[]
+  adding: boolean
+  onImageClick: (x: number, y: number) => void
+  onMarkerClick: (marker: Marker) => void
+}) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const imageMarkers = markers.filter((m) => m.x_pos !== undefined && m.x_pos !== null)
+
+  const handleClick = (e: React.MouseEvent) => {
+    if (!adding || !containerRef.current) return
+    const rect = containerRef.current.getBoundingClientRect()
+    const x = ((e.clientX - rect.left) / rect.width) * 100
+    const y = ((e.clientY - rect.top) / rect.height) * 100
+    onImageClick(
+      Math.round(Math.max(0, Math.min(100, x)) * 100) / 100,
+      Math.round(Math.max(0, Math.min(100, y)) * 100) / 100,
+    )
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      className={clsx('relative inline-block max-w-full max-h-full', adding && 'cursor-crosshair')}
+      onClick={handleClick}
+    >
+      <img src={src} alt="" className="max-w-full max-h-full object-contain rounded-lg" draggable={false} />
+      {imageMarkers.map((m) => (
+        <button
+          key={m.id}
+          className="absolute -translate-x-1/2 -translate-y-1/2 group/pin z-10"
+          style={{ left: `${m.x_pos}%`, top: `${m.y_pos}%` }}
+          onClick={(e) => { e.stopPropagation(); onMarkerClick(m) }}
+          title={`${m.label} — silmek için tıkla`}
+        >
+          <MapPin
+            size={20}
+            style={{ color: MARKER_COLORS[m.color] }}
+            className="drop-shadow-lg hover:scale-125 transition-transform"
+          />
+          {/* Tooltip */}
+          <div className="absolute left-6 top-0 bg-surface-50 border border-surface-300 rounded-md px-2 py-1 opacity-0 group-hover/pin:opacity-100 pointer-events-none transition-opacity whitespace-nowrap shadow-lg z-20">
+            <p className="text-[10px] font-medium text-white">{m.label}</p>
+            {m.note && <p className="text-[10px] text-slate-400">{m.note}</p>}
+          </div>
+        </button>
+      ))}
+      {adding && (
+        <div className="absolute inset-0 border-2 border-dashed border-brand-500/50 rounded-lg pointer-events-none flex items-center justify-center">
+          <span className="bg-surface-50/80 px-3 py-1.5 rounded-full text-xs text-brand-300">
+            Marker konumunu seçin
+          </span>
+        </div>
+      )}
     </div>
   )
 }

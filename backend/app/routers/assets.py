@@ -31,26 +31,34 @@ limiter = Limiter(key_func=get_remote_address)
 
 # SECURITY: Allowed MIME types — explicit whitelist, no wildcards
 ALLOWED_MIME_TYPES: dict[str, AssetType] = {
-    # Images
+    # ── Görseller ──
     "image/jpeg": AssetType.image,
     "image/png": AssetType.image,
     "image/gif": AssetType.image,
     "image/webp": AssetType.image,
     "image/avif": AssetType.image,
-    # Videos
+    "image/tiff": AssetType.image,     # TIFF (profesyonel fotoğrafçılık)
+    "image/x-tiff": AssetType.image,   # TIFF alternatif MIME
+    # ── Videolar — H.264 ve H.265/HEVC dahil ──
+    # MP4 container: H.264 (AVC), H.265 (HEVC), AV1
     "video/mp4": AssetType.video,
+    # MOV container: H.264, H.265, ProRes (Apple/profesyonel)
     "video/quicktime": AssetType.video,
+    # AVI container: H.264 ve diğerleri
     "video/x-msvideo": AssetType.video,
+    "video/avi": AssetType.video,
+    # MKV container: H.264, H.265, VP9
     "video/x-matroska": AssetType.video,
+    # WebM: VP8, VP9, AV1
     "video/webm": AssetType.video,
-    # Audio
+    # ── Ses ──
     "audio/mpeg": AssetType.audio,
     "audio/wav": AssetType.audio,
     "audio/ogg": AssetType.audio,
     "audio/mp4": AssetType.audio,
     "audio/flac": AssetType.audio,
     "audio/x-flac": AssetType.audio,
-    # Documents
+    # ── Belgeler ──
     "application/pdf": AssetType.document,
 }
 
@@ -68,6 +76,9 @@ MAGIC_BYTES: list[tuple[bytes, str]] = [
     (b"fLaC", "audio/flac"),
     (b"OggS", "audio/ogg"),
     (b"%PDF", "application/pdf"),
+    # TIFF: little-endian (Intel) ve big-endian (Motorola)
+    (b"II\x2a\x00", "image/tiff"),
+    (b"MM\x00\x2a", "image/tiff"),
 ]
 
 

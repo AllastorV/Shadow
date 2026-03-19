@@ -93,3 +93,4 @@ class Asset(Base):
     comments = relationship("Comment", back_populates="asset", cascade="all, delete-orphan")
     tags = relationship("Tag", back_populates="asset", cascade="all, delete-orphan")
     share_links = relationship("ShareLink", back_populates="asset", cascade="all, delete-orphan")
+    markers = relationship("Marker", back_populates="asset", cascade="all, delete-orphan")
