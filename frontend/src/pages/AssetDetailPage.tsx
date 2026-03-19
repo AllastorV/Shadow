@@ -204,6 +204,12 @@ export default function AssetDetailPage() {
     onError: () => toast.error('İptal işlemi başarısız'),
   })
 
+  // ── Gerçek zamanlı işbirliği — her zaman çağrılmalı (React hooks kuralı) ──
+  const { activeUsers, status: collabStatus, maxUsers } = useCollaboration({
+    projectId: asset?.project_id,
+    assetId:   assetId ?? '',
+  })
+
   if (isLoading) return (
     <div className="flex items-center justify-center h-full">
       <Loader2 size={24} className="animate-spin text-brand-400" />
@@ -216,13 +222,6 @@ export default function AssetDetailPage() {
   const assetUrl = `/files/${asset.project_id}/${asset.filename}`
   // İndirme: kimlik doğrulamalı endpoint
   const downloadUrl = `/api/v1/assets/${assetId}/download`
-
-  // ── Gerçek zamanlı işbirliği ───────────────────────────────────────────────
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  const { activeUsers, status: collabStatus, maxUsers } = useCollaboration({
-    projectId: asset.project_id,
-    assetId:   assetId ?? '',
-  })
 
   return (
     <div className="flex h-full">
@@ -1031,9 +1030,9 @@ function MarkerListItem({
               {formatTimecode(marker.timestamp)}
             </button>
           )}
-          {marker.x_pos !== undefined && marker.x_pos !== null && (
+          {marker.x_pos != null && marker.y_pos != null && (
             <span className="text-[10px] text-slate-500 font-mono shrink-0">
-              {marker.x_pos.toFixed(1)}%, {marker.y_pos?.toFixed(1)}%
+              {marker.x_pos.toFixed(1)}%, {marker.y_pos.toFixed(1)}%
             </span>
           )}
         </div>

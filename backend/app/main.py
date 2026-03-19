@@ -122,8 +122,15 @@ async def security_headers_middleware(request: Request, call_next):
     )
 
     # HSTS: HTTPS zorunlu (1 yıl, alt alan adları dahil)
-    # Sadece prodüksiyonda etkinleştir (HTTP geliştirme için devre dışı)
-    # response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    # X-Forwarded-Proto: https → Caddy/nginx arkasında çalışırken HTTPS bağlantı var
+    is_https = (
+        request.headers.get("X-Forwarded-Proto") == "https"
+        or request.url.scheme == "https"
+    )
+    if is_https:
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains; preload"
+        )
 
     # Server parmak izi gizle (MutableHeaders.pop yok — del kullan)
     try:

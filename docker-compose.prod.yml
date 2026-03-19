@@ -1,0 +1,58 @@
+version: '3.9'
+
+# Prodüksiyon HTTPS yapılandırması — Caddy otomatik TLS yönetir
+# Kullanım:
+#   DOMAIN=shadow.example.com \
+#   SECRET_KEY=<güçlü-rastgele-anahtar> \
+#   ANTHROPIC_API_KEY=<api-key> \
+#   docker compose -f docker-compose.prod.yml up -d
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"    # HTTP → HTTPS redirect
+      - "443:443"  # HTTPS
+      - "443:443/udp"  # HTTP/3 (QUIC)
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data          # TLS sertifikaları (kalıcı)
+      - caddy_config:/config      # Caddy yapılandırma cache
+    environment:
+      - DOMAIN=${DOMAIN:-localhost}
+    depends_on:
+      - backend
+      - frontend
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    expose:
+      - "8000"
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./backend/shadow.db:/app/shadow.db
+    environment:
+      - DATABASE_URL=sqlite:///./shadow.db
+      - UPLOAD_DIR=/app/uploads
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - SECRET_KEY=${SECRET_KEY}
+      # HTTPS ile gelen originlere izin ver
+      - ALLOWED_ORIGINS=https://${DOMAIN:-localhost},http://localhost:5173
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    expose:
+      - "80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

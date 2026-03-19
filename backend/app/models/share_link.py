@@ -35,3 +35,7 @@ class ShareLink(Base):
 
     asset = relationship("Asset", back_populates="share_links")
     created_by = relationship("User")
+
+    @property
+    def has_password(self) -> bool:
+        return self.password_hash is not None

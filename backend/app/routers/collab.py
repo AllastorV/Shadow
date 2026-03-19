@@ -9,7 +9,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, Depends
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models.user import User
+from ..models.user import User, UserRole
 from ..models.project import Project
 from ..services.auth import decode_token
 from ..ws_manager import manager
@@ -66,7 +66,6 @@ async def collab_ws(
         await websocket.close(code=4004, reason="Proje bulunamadı")
         return
 
-    from ..models.user import UserRole
     if user.role != UserRole.admin:
         is_owner  = project.owner_id == user.id
         is_member = any(m.id == user.id for m in project.members)

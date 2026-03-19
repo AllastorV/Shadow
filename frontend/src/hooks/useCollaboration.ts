@@ -17,7 +17,7 @@ export interface CollabUser {
 export type CollabStatus = 'connecting' | 'connected' | 'disconnected' | 'full'
 
 interface Options {
-  projectId: number
+  projectId: number | undefined
   assetId:   string   // useParams'tan gelen string
 }
 

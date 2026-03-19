@@ -1,0 +1,50 @@
+# Shadow DAM — Caddy HTTPS reverse proxy
+# Kullanım: DOMAIN ortam değişkenini ayarlayın (ör. shadow.example.com)
+# Caddy otomatik olarak Let's Encrypt sertifikası alır ve yeniler.
+#
+# Yerel geliştirme için: caddy run --watch (tarayıcıya mkcert CA'sı yükleyin)
+# Prodüksiyon için:      DOMAIN=shadow.example.com caddy run
+
+{$DOMAIN:localhost} {
+    # HTTPS otomatik — Let's Encrypt veya ZeroSSL
+    # Yerel domain için self-signed cert üretilir
+
+    # Güvenlik başlıkları (FastAPI'deki başlıkları tamamlar)
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options    nosniff
+        X-Frame-Options           DENY
+        Referrer-Policy           strict-origin-when-cross-origin
+        -Server
+    }
+
+    # API — FastAPI backend
+    handle /api/* {
+        reverse_proxy backend:8000 {
+            header_up X-Forwarded-Proto https
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
+    # Static dosyalar
+    handle /files/* {
+        reverse_proxy backend:8000
+    }
+
+    # WebSocket — gerçek zamanlı işbirliği
+    handle /ws/* {
+        reverse_proxy backend:8000 {
+            transport http {
+                dial_timeout 5s
+                keep_alive 60s
+            }
+        }
+    }
+
+    # Frontend (nginx/static)
+    handle {
+        reverse_proxy frontend:80
+    }
+}
+
+# HTTP → HTTPS redirect (80 zaten Caddy tarafından yönetilir, otomatik redirect)

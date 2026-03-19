@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     OLLAMA_TEXT_MODEL: str = "llama3.2:3b"
 
     # Allowed origins for CORS (comma-separated)
-    ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:3000,http://localhost:4173"
+    ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:3000,http://localhost:4173,https://localhost:5173"
     # Rate limiting
     RATE_LIMIT_PER_MINUTE: int = 60
     # Allowed file extensions (security whitelist)

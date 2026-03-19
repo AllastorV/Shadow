@@ -235,7 +235,7 @@ async def upload_assets(
     request: Request,
     project_id: int,
     files: List[UploadFile] = File(...),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_editor),
 ):

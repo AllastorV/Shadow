@@ -1,5 +1,5 @@
-from pydantic import BaseModel, field_validator, model_validator
-from typing import Optional, Any
+from pydantic import BaseModel, field_validator
+from typing import Optional
 from datetime import datetime, timezone
 from ..models.share_link import SharePermission
 
@@ -54,14 +54,6 @@ class ShareLinkResponse(BaseModel):
     created_at: datetime
     has_password: bool = False
     plain_password: Optional[str] = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def compute_has_password(cls, data: Any) -> Any:
-        # When loading from ORM object, compute has_password from password_hash
-        if hasattr(data, "password_hash"):
-            data.__dict__.setdefault("has_password", bool(data.password_hash))
-        return data
 
     class Config:
         from_attributes = True
