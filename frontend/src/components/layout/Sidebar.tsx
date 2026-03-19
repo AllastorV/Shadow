@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Search, FolderOpen, Settings, LogOut, Shield, Layers } from 'lucide-react'
+import { LayoutDashboard, Search, FolderOpen, LogOut, Layers, Cpu, Cloud, AlertCircle } from 'lucide-react'
 import { useAuthStore } from '../../store/auth'
 import { useQuery } from '@tanstack/react-query'
 import api from '../../utils/api'
@@ -13,6 +13,13 @@ export default function Sidebar() {
   const { data: projects } = useQuery<Project[]>({
     queryKey: ['projects'],
     queryFn: () => api.get('/projects/').then((r) => r.data),
+  })
+
+  const { data: aiStatus } = useQuery<any>({
+    queryKey: ['aiStatus'],
+    queryFn: () => api.get('/ai/status').then((r) => r.data),
+    refetchInterval: 30000,
+    retry: false,
   })
 
   const handleLogout = () => {
@@ -53,6 +60,29 @@ export default function Sidebar() {
           <p className="text-xs text-slate-500 px-3 py-2">No projects yet</p>
         )}
       </nav>
+
+      {/* AI Status */}
+      {aiStatus && (
+        <div className="px-3 py-2 mx-2 mb-1 rounded-lg bg-surface-100 border border-surface-300">
+          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">AI Backend</p>
+          {aiStatus.ollama?.available ? (
+            <div className="flex items-center gap-1.5 text-xs text-emerald-400">
+              <Cpu size={11} />
+              <span>Local · {aiStatus.ollama.vision_model}</span>
+            </div>
+          ) : aiStatus.anthropic?.available ? (
+            <div className="flex items-center gap-1.5 text-xs text-brand-400">
+              <Cloud size={11} />
+              <span>Anthropic API</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 text-xs text-amber-400">
+              <AlertCircle size={11} />
+              <span>Mock (AI yok)</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Bottom section */}
       <div className="p-3 border-t border-surface-300 space-y-0.5">

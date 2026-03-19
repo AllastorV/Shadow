@@ -97,3 +97,10 @@ app.include_router(share.router, prefix="/api/v1")
 @app.get("/api/v1/health")
 def health():
     return {"status": "ok", "app": "Shadow DAM"}
+
+
+@app.get("/api/v1/ai/status")
+def ai_status():
+    """AI backend durumunu döndür (Ollama / Anthropic)."""
+    from .services.ai_service import ai_service
+    return ai_service.get_status()

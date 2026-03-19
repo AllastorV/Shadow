@@ -14,6 +14,29 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = str(Path(__file__).parent.parent / "uploads")
     MAX_UPLOAD_SIZE: int = 500 * 1024 * 1024  # 500MB
     ANTHROPIC_API_KEY: str = ""
+
+    # ── Local AI (Ollama) ayarları ────────────────────────────────────────────
+    # AI backend: "auto" | "local" | "anthropic" | "mock"
+    #   auto   → Ollama varsa local, yoksa Anthropic, ikisi de yoksa mock
+    #   local  → Sadece Ollama kullan (Ollama çalışmıyorsa hata ver)
+    #   anthropic → Sadece Anthropic API kullan
+    #   mock   → Gerçek AI yok, dummy veri döndür (test/geliştirme)
+    AI_BACKEND: str = "auto"
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    # Ollama vision modeli — görsel analiz için (LLaVA tabanlı)
+    # Öneriler (küçükten büyüğe):
+    #   moondream   ~1.7GB  — en hızlı, temel analiz
+    #   llava:7b    ~4.1GB  — iyi denge
+    #   llava:13b   ~7.4GB  — yüksek kalite (16GB+ RAM)
+    #   llava-phi3  ~2.9GB  — Phi-3 tabanlı, hızlı ve iyi
+    OLLAMA_VISION_MODEL: str = "moondream"
+    # Ollama text modeli — AI arama reranking için
+    # Öneriler:
+    #   gemma2:2b    ~1.6GB  — hızlı
+    #   llama3.2:3b  ~2.0GB  — çok iyi küçük model
+    #   mistral:7b   ~4.1GB  — güçlü
+    OLLAMA_TEXT_MODEL: str = "llama3.2:3b"
+
     # Allowed origins for CORS (comma-separated)
     ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:3000,http://localhost:4173"
     # Rate limiting
