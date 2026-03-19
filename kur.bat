@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-title Shadow DAM — Bağımlılık Kurulumu
+title Shadow DAM — Kurulum
 
 echo.
 echo  ╔══════════════════════════════════════╗
@@ -26,17 +26,17 @@ if errorlevel 1 (
 )
 for /f "tokens=*" %%v in ('node --version 2^>^&1') do echo        Node %%v bulundu.
 
-:: ── Backend bağımlılıkları ────────────────────────────────────────────────────
+:: ── Backend ───────────────────────────────────────────────────────────────────
 echo.
-echo [3/4] Backend bagimliliklari yukleniyor  (pip)...
+echo [3/4] Backend bagimliliklari yukleniyor...
 cd /d "%~dp0backend"
 
 if not exist "venv" (
     echo        Sanal ortam olusturuluyor...
     python -m venv venv
 )
-
 call venv\Scripts\activate.bat
+
 pip install -r requirements.txt --quiet --no-warn-script-location
 if errorlevel 1 (
     echo  [HATA] pip kurulumu basarisiz.
@@ -44,45 +44,41 @@ if errorlevel 1 (
 )
 echo        Backend bagimliliklari hazir.
 
-:: .env dosyası yoksa örnek oluştur
+:: .env yoksa oluştur
 if not exist ".env" (
     echo.
-    echo        .env dosyasi bulunamadi — ornek olusturuluyor...
+    echo        .env dosyasi olusturuluyor...
+    for /f "tokens=*" %%k in ('python -c "import secrets; print(secrets.token_hex(32))"') do set RNDKEY=%%k
     (
-        echo # Shadow DAM — Backend Ayarlari
-        echo SECRET_KEY=BURAYA-EN-AZ-32-KARAKTERLIK-RASTGELE-BIR-ANAHTAR-GIRIN
+        echo SECRET_KEY=%RNDKEY%
         echo ANTHROPIC_API_KEY=
         echo DATABASE_URL=sqlite:///./shadow.db
         echo UPLOAD_DIR=./uploads
         echo AI_BACKEND=auto
     ) > .env
-    echo        backend\.env olusturuldu — SECRET_KEY degerini doldurun!
+    echo        backend\.env olusturuldu.
+    echo        ANTHROPIC_API_KEY degerini doldurun ^(isteğe bagli^).
 )
 
 cd /d "%~dp0"
 
-:: ── Frontend bağımlılıkları ───────────────────────────────────────────────────
+:: ── Frontend ──────────────────────────────────────────────────────────────────
 echo.
-echo [4/4] Frontend bagimliliklari yukleniyor  (npm)...
+echo [4/4] Frontend bagimliliklari yukleniyor...
 cd /d "%~dp0frontend"
 call npm install --loglevel=error
 if errorlevel 1 (
     echo  [HATA] npm install basarisiz.
     pause & exit /b 1
 )
-echo        Frontend bagimliliklari hazir.
 
 cd /d "%~dp0"
 
-:: ── Tamamlandı ────────────────────────────────────────────────────────────────
 echo.
 echo  ╔══════════════════════════════════════╗
 echo  ║    Kurulum tamamlandi!               ║
 echo  ║                                      ║
-echo  ║  Baslatmak icin:  dev.bat            ║
-echo  ║  Docker ile:      docker-start.bat   ║
+echo  ║  Baslatmak icin:  baslat.bat         ║
 echo  ╚══════════════════════════════════════╝
-echo.
-echo  ONEMLI: backend\.env dosyasindaki SECRET_KEY degerini ayarlayin.
 echo.
 pause
