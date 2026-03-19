@@ -320,6 +320,16 @@ async def upload_assets(
     return created_assets
 
 
+# Güvenli sıralama alanları — doğrudan model sütunlarına eşleşir
+_SORT_COLUMNS = {
+    "name":   Asset.original_name,
+    "date":   Asset.created_at,
+    "size":   Asset.file_size,
+    "type":   Asset.asset_type,
+    "status": Asset.status,
+}
+
+
 @router.get("/project/{project_id}", response_model=List[AssetResponse])
 @limiter.limit("60/minute")
 def list_project_assets(
@@ -328,6 +338,8 @@ def list_project_assets(
     asset_type: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     search: Optional[str] = Query(None, max_length=200),
+    sort_by: str = Query("date", pattern="^(name|date|size|type|status)$"),
+    sort_order: str = Query("desc", pattern="^(asc|desc)$"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
@@ -351,7 +363,13 @@ def list_project_assets(
             | Asset.ai_scene_type.ilike(search_term)
         )
 
-    assets = query.order_by(Asset.created_at.desc()).offset(skip).limit(limit).all()
+    # Sıralama — yalnızca beyaz listedeki sütunlar kullanılır (SQL enjeksiyonu riski yok)
+    col = _SORT_COLUMNS.get(sort_by, Asset.created_at)
+    order_expr = col.asc() if sort_order == "asc" else col.desc()
+    # İkincil sıralama: aynı değerlere sahip satırlar için tutarlı id sırası
+    query = query.order_by(order_expr, Asset.id.desc())
+
+    assets = query.offset(skip).limit(limit).all()
     return _attach_comment_counts(assets, db)
 
 

@@ -1,8 +1,7 @@
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Upload, Grid3X3, List, RefreshCw, Folder } from 'lucide-react'
-import toast from 'react-hot-toast'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Upload, Grid3X3, List, RefreshCw, Folder, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import api from '../utils/api'
 import type { Asset, Project } from '../types'
 import AssetCard from '../components/assets/AssetCard'
@@ -12,7 +11,10 @@ import { useDebounce } from '../utils/useDebounce'
 import { useShortcutAction } from '../utils/shortcuts'
 
 const STATUS_FILTERS = ['all', 'pending', 'approved', 'rejected'] as const
-const TYPE_FILTERS = ['all', 'image', 'video', 'audio', 'document', 'other'] as const
+const TYPE_FILTERS   = ['all', 'image', 'video', 'audio', 'document', 'other'] as const
+
+type SortBy    = 'name' | 'date' | 'size' | 'type' | 'status'
+type SortOrder = 'asc' | 'desc'
 
 const STATUS_LABELS: Record<string, string> = {
   all: 'Tümü', pending: 'Bekliyor', approved: 'Onaylı',
@@ -22,65 +24,71 @@ const TYPE_LABELS: Record<string, string> = {
   all: 'Tüm türler', image: 'Görüntü', video: 'Video',
   audio: 'Ses', document: 'Belge', other: 'Diğer',
 }
+const SORT_OPTIONS: { value: SortBy; label: string }[] = [
+  { value: 'date',   label: 'Tarih'  },
+  { value: 'name',   label: 'Ad'     },
+  { value: 'size',   label: 'Boyut'  },
+  { value: 'type',   label: 'Tür'    },
+  { value: 'status', label: 'Durum'  },
+]
 
 export default function ProjectPage() {
   const { projectId } = useParams<{ projectId: string }>()
-  const navigate = useNavigate()
-  const queryClient = useQueryClient()
-  const [view, setView] = useState<'grid' | 'list'>('grid')
-  const [showUpload, setShowUpload] = useState(false)
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [typeFilter, setTypeFilter] = useState('all')
-  const [searchInput, setSearchInput] = useState('')
+  const navigate      = useNavigate()
+  const queryClient   = useQueryClient()
 
-  // Debounce: arama sorgusunu kullanıcı yazmayı 400ms duraksatana kadar erteye
-  // — her tuş vuruşunda API çağrısını önler
+  const [view,         setView]         = useState<'grid' | 'list'>('grid')
+  const [showUpload,   setShowUpload]   = useState(false)
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [typeFilter,   setTypeFilter]   = useState('all')
+  const [searchInput,  setSearchInput]  = useState('')
+  const [sortBy,       setSortBy]       = useState<SortBy>('date')
+  const [sortOrder,    setSortOrder]    = useState<SortOrder>('desc')
+
   const search = useDebounce(searchInput, 400)
 
   const { data: project } = useQuery<Project>({
     queryKey: ['project', projectId],
-    queryFn: () => api.get(`/projects/${projectId}`).then((r) => r.data),
+    queryFn:  () => api.get(`/projects/${projectId}`).then((r) => r.data),
   })
 
   const { data: assets, isLoading, refetch } = useQuery<Asset[]>({
-    queryKey: ['assets', projectId, statusFilter, typeFilter, search],
+    queryKey: ['assets', projectId, statusFilter, typeFilter, search, sortBy, sortOrder],
     queryFn: () => {
-      const params: Record<string, string> = {}
-      if (statusFilter !== 'all') params.status = statusFilter
-      if (typeFilter !== 'all') params.asset_type = typeFilter
-      if (search) params.search = search
+      const params: Record<string, string> = { sort_by: sortBy, sort_order: sortOrder }
+      if (statusFilter !== 'all') params.status     = statusFilter
+      if (typeFilter   !== 'all') params.asset_type = typeFilter
+      if (search)                 params.search      = search
       return api.get(`/assets/project/${projectId}`, { params }).then((r) => r.data)
     },
-    // search değeri debounce edildiği için stale verisini biraz daha uzun tut
     staleTime: 60_000,
   })
 
-  // useMemo: assets değişmediği sürece sayıları yeniden hesaplama
   const counts = useMemo(() => ({
-    all: assets?.length ?? 0,
-    pending: assets?.filter((a) => a.status === 'pending').length ?? 0,
+    all:      assets?.length ?? 0,
+    pending:  assets?.filter((a) => a.status === 'pending').length  ?? 0,
     approved: assets?.filter((a) => a.status === 'approved').length ?? 0,
     rejected: assets?.filter((a) => a.status === 'rejected').length ?? 0,
   }), [assets])
 
-  // useCallback: referans kararlılığı — UploadZone yeniden render olmaz
   const handleUploadSuccess = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['assets', projectId] })
     queryClient.invalidateQueries({ queryKey: ['projects'] })
   }, [queryClient, projectId])
 
-  const handleSetView = useCallback((v: 'grid' | 'list') => setView(v), [])
+  const handleSetView      = useCallback((v: 'grid' | 'list') => setView(v), [])
   const handleStatusFilter = useCallback((s: string) => setStatusFilter(s), [])
-  const handleTypeFilter = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => setTypeFilter(e.target.value), [])
+  const handleTypeFilter   = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => setTypeFilter(e.target.value), [])
+  const handleSortBy       = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => setSortBy(e.target.value as SortBy), [])
+  const toggleSortOrder    = useCallback(() => setSortOrder((o) => o === 'asc' ? 'desc' : 'asc'), [])
 
   useShortcutAction('view_grid', () => setView('grid'))
   useShortcutAction('view_list', () => setView('list'))
   useShortcutAction('upload',    () => setShowUpload(true))
 
-  // AssetCard click handler factory — useCallback ile sabit referans
   const handleAssetClick = useCallback(
     (assetId: number) => () => navigate(`/projects/${projectId}/assets/${assetId}`),
-    [navigate, projectId]
+    [navigate, projectId],
   )
 
   return (
@@ -109,9 +117,9 @@ export default function ProjectPage() {
 
       {/* Toolbar */}
       <div className="px-6 py-3 border-b border-surface-300 flex items-center gap-3 flex-wrap shrink-0">
-        {/* Arama — debounce edilmiş */}
+        {/* Arama */}
         <input
-          className="input flex-1 min-w-48 max-w-xs"
+          className="input flex-1 min-w-40 max-w-xs"
           placeholder="Asset ara…"
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
@@ -127,7 +135,7 @@ export default function ProjectPage() {
                 'px-3 py-1 rounded-lg text-xs font-medium transition-colors',
                 statusFilter === s
                   ? 'bg-brand-600 text-white'
-                  : 'bg-surface-200 text-slate-400 hover:text-slate-200'
+                  : 'bg-surface-200 text-slate-400 hover:text-slate-200',
               )}
             >
               {s === 'all' ? `${STATUS_LABELS.all} (${counts.all})` : STATUS_LABELS[s]}
@@ -148,6 +156,35 @@ export default function ProjectPage() {
             <option key={t} value={t}>{TYPE_LABELS[t]}</option>
           ))}
         </select>
+
+        {/* Sıralama */}
+        <div className="flex items-center gap-1">
+          <select
+            value={sortBy}
+            onChange={handleSortBy}
+            className="input w-auto py-1 text-xs"
+            title="Sıralama ölçütü"
+          >
+            {SORT_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+          <button
+            onClick={toggleSortOrder}
+            className="btn-ghost p-1.5"
+            title={sortOrder === 'asc' ? 'Artan sıra — tıkla: azalan' : 'Azalan sıra — tıkla: artan'}
+          >
+            {sortBy === 'date' && sortOrder === 'desc' ? (
+              <ArrowDown size={13} className="text-brand-400" />
+            ) : sortBy === 'date' && sortOrder === 'asc' ? (
+              <ArrowUp size={13} className="text-brand-400" />
+            ) : sortOrder === 'asc' ? (
+              <ArrowUp size={13} className="text-brand-400" />
+            ) : (
+              <ArrowDown size={13} className="text-brand-400" />
+            )}
+          </button>
+        </div>
 
         {/* Görünüm geçişi */}
         <div className="flex bg-surface-200 rounded-lg p-0.5 ml-auto">
@@ -173,7 +210,10 @@ export default function ProjectPage() {
         {isLoading ? (
           <SkeletonGrid view={view} />
         ) : assets?.length === 0 ? (
-          <EmptyState onUpload={() => setShowUpload(true)} hasFilters={statusFilter !== 'all' || typeFilter !== 'all' || !!search} />
+          <EmptyState
+            onUpload={() => setShowUpload(true)}
+            hasFilters={statusFilter !== 'all' || typeFilter !== 'all' || !!search}
+          />
         ) : (
           <div
             className={
