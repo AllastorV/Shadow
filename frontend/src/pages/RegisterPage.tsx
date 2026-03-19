@@ -134,7 +134,7 @@ export default function RegisterPage() {
         </div>
 
         <p className="text-[11px] text-slate-600 relative z-10">
-          AI-powered Digital Asset Management
+          Digital Asset Management
         </p>
       </div>
 

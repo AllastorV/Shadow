@@ -72,7 +72,7 @@ export default function LoginPage() {
         {/* Features */}
         <div className="relative z-10 space-y-5">
           {[
-            { icon: '🧠', title: 'AI Destekli Analiz', desc: 'Her varlık otomatik olarak etiketlenir, açıklanır ve aranabilir hale gelir.' },
+            { icon: '🧠', title: 'Otomatik Analiz', desc: 'Her varlık otomatik olarak etiketlenir, açıklanır ve aranabilir hale gelir.' },
             { icon: '🔗', title: 'Kolay Paylaşım', desc: 'Güvenli bağlantılarla ekip üyeleri veya dış paydaşlarla varlıkları paylaşın.' },
             { icon: '🎬', title: 'Marker Sistemi', desc: 'Video ve görsel işaretçileri doğrudan Premiere Pro veya DaVinci Resolve\'a aktarın.' },
           ].map((f) => (
@@ -90,7 +90,7 @@ export default function LoginPage() {
 
         {/* Footer */}
         <p className="text-[11px] text-slate-600 relative z-10">
-          AI-powered Digital Asset Management
+          Digital Asset Management
         </p>
       </div>
 

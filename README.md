@@ -2,7 +2,7 @@
 
 # Shadow DAM
 
-**AI destekli Dijital Varlık Yönetim platformu**
+**Dijital Varlık Yönetim platformu**
 
 Medya ekipleri için gerçek zamanlı işbirliği, akıllı arama ve NLE entegrasyonu.
 
@@ -30,7 +30,7 @@ Medya ekipleri için gerçek zamanlı işbirliği, akıllı arama ve NLE entegra
 | 🔗 **Kişisel Davet Sistemi** | Her davetliye özel link, yetki seviyesi, isteğe bağlı şifre |
 | 👤 **Misafir Erişimi** | Kayıt gerektirmez — link ile yorum ve marker ekle |
 | 🎥 **Özel Video Oynatıcı** | Premiere tarzı transport, marker timeline, hız kontrolü |
-| 📁 **Proje Yönetimi** | Grid/liste, tür/durum filtresi, AI destekli arama |
+| 📁 **Proje Yönetimi** | Grid/liste, tür/durum filtresi, akıllı arama |
 | 🌓 **Karanlık / Aydınlık Mod** | Sistem tercihine bağımsız toggle |
 | 🔐 **RBAC + Brute-force Koruması** | Admin / Editor / Viewer, hesap kilitleme |
 | 🔒 **HTTPS Desteği** | Caddy ile otomatik TLS, HSTS, Let's Encrypt |

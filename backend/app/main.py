@@ -74,7 +74,7 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
 
 app = FastAPI(
     title="Shadow — AI Media Asset Management",
-    description="AI-powered Digital Asset Management platform",
+    description="Digital Asset Management platform",
     version="1.0.0",
     # SECURITY: Prodüksiyonda /docs ve /redoc kapat:
     # docs_url=None, redoc_url=None,

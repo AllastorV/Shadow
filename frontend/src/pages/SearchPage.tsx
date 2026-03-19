@@ -51,7 +51,7 @@ export default function SearchPage() {
           style={{ background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.25)', color: '#818cf8' }}
         >
           <Sparkles size={11} />
-          AI Destekli Arama
+          Akıllı Arama
         </div>
         <h1 className="text-3xl font-bold text-white mb-3" style={{ color: 'inherit' }}>
           Herhangi bir varlığı bulun
