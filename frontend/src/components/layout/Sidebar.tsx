@@ -1,3 +1,4 @@
+import { memo, useEffect, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { LayoutDashboard, Search, FolderOpen, LogOut, Layers, Cpu, Cloud, AlertCircle } from 'lucide-react'
 import { useAuthStore } from '../../store/auth'
@@ -6,9 +7,21 @@ import api from '../../utils/api'
 import type { Project } from '../../types'
 import clsx from 'clsx'
 
-export default function Sidebar() {
+// Sekme görünürlüğünü izle — gizli sekmelerde polling durur
+function usePageVisible() {
+  const [visible, setVisible] = useState(!document.hidden)
+  useEffect(() => {
+    const handler = () => setVisible(!document.hidden)
+    document.addEventListener('visibilitychange', handler)
+    return () => document.removeEventListener('visibilitychange', handler)
+  }, [])
+  return visible
+}
+
+export default memo(function Sidebar() {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
+  const pageVisible = usePageVisible()
 
   const { data: projects } = useQuery<Project[]>({
     queryKey: ['projects'],
@@ -18,8 +31,14 @@ export default function Sidebar() {
   const { data: aiStatus } = useQuery<any>({
     queryKey: ['aiStatus'],
     queryFn: () => api.get('/ai/status').then((r) => r.data),
-    refetchInterval: 30000,
+    // Sekme görünürse 5 dakikada bir kontrol et, gizliyse dur
+    refetchInterval: pageVisible ? 5 * 60 * 1000 : false,
+    // Pencere odaklanınca yenile (tab switching)
+    refetchOnWindowFocus: false,
+    // Başarısız istekte retry yapma — AI opsiyonel özellik
     retry: false,
+    // Eski veriyi 10 dk cache'de tut
+    staleTime: 10 * 60 * 1000,
   })
 
   const handleLogout = () => {
@@ -39,13 +58,11 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
-        {/* Main nav */}
         <NavItem to="/dashboard" icon={<LayoutDashboard size={16} />} label="Dashboard" />
-        <NavItem to="/search" icon={<Search size={16} />} label="AI Search" />
+        <NavItem to="/search" icon={<Search size={16} />} label="AI Arama" />
 
-        {/* Projects */}
         <div className="pt-4 pb-1">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-3">Projects</p>
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-3">Projeler</p>
         </div>
         {projects?.map((project) => (
           <NavItem
@@ -57,18 +74,18 @@ export default function Sidebar() {
           />
         ))}
         {projects?.length === 0 && (
-          <p className="text-xs text-slate-500 px-3 py-2">No projects yet</p>
+          <p className="text-xs text-slate-500 px-3 py-2">Henüz proje yok</p>
         )}
       </nav>
 
-      {/* AI Status */}
+      {/* AI Durumu */}
       {aiStatus && (
         <div className="px-3 py-2 mx-2 mb-1 rounded-lg bg-surface-100 border border-surface-300">
           <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">AI Backend</p>
           {aiStatus.ollama?.available ? (
             <div className="flex items-center gap-1.5 text-xs text-emerald-400">
               <Cpu size={11} />
-              <span>Local · {aiStatus.ollama.vision_model}</span>
+              <span>Yerel · {aiStatus.ollama.vision_model}</span>
             </div>
           ) : aiStatus.anthropic?.available ? (
             <div className="flex items-center gap-1.5 text-xs text-brand-400">
@@ -84,7 +101,7 @@ export default function Sidebar() {
         </div>
       )}
 
-      {/* Bottom section */}
+      {/* Kullanıcı */}
       <div className="p-3 border-t border-surface-300 space-y-0.5">
         <div className="flex items-center gap-2 px-3 py-2 mb-1">
           <div className="w-7 h-7 rounded-full bg-brand-700 flex items-center justify-center shrink-0">
@@ -102,18 +119,16 @@ export default function Sidebar() {
           className="btn-ghost w-full justify-start text-red-400 hover:text-red-300 hover:bg-red-500/10"
         >
           <LogOut size={14} />
-          Sign out
+          Çıkış Yap
         </button>
       </div>
     </aside>
   )
-}
+})
 
-function NavItem({
-  to,
-  icon,
-  label,
-  badge,
+// NavItem ayrı bileşen — React.memo ile link değişmediğinde yeniden render olmaz
+const NavItem = memo(function NavItem({
+  to, icon, label, badge,
 }: {
   to: string
   icon: React.ReactNode
@@ -139,4 +154,4 @@ function NavItem({
       )}
     </NavLink>
   )
-}
+})

@@ -2,6 +2,7 @@ import logging
 from pathlib import Path
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -37,6 +38,10 @@ app = FastAPI(
 # Rate limiting
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# GZip sıkıştırma — JSON yanıtları %60-80 daha küçük
+# minimum_size=1000: küçük yanıtları sıkıştırma (CPU vs bandwidth tradeoff)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # CORS — yalnızca yapılandırılmış kaynaklara izin ver
 app.add_middleware(

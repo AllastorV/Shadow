@@ -26,12 +26,12 @@ class Asset(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     filename = Column(String, nullable=False)
-    original_name = Column(String, nullable=False)
+    original_name = Column(String, nullable=False, index=True)  # arama için
     file_path = Column(String, nullable=False)
-    file_size = Column(Integer, nullable=False)  # bytes
+    file_size = Column(Integer, nullable=False)
     mime_type = Column(String, nullable=False)
-    asset_type = Column(Enum(AssetType), nullable=False)
-    status = Column(Enum(AssetStatus), default=AssetStatus.pending)
+    asset_type = Column(Enum(AssetType), nullable=False, index=True)  # tür filtresi
+    status = Column(Enum(AssetStatus), default=AssetStatus.pending, index=True)  # durum filtresi
 
     # Dimensions (for images/videos)
     width = Column(Integer, nullable=True)
@@ -83,9 +83,9 @@ class Asset(Base):
     thumbnail_path = Column(String, nullable=True)
 
     # Relationships
-    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False, index=True)  # liste sorgusu
     uploader_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)  # sıralama
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     project = relationship("Project", back_populates="assets")

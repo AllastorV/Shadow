@@ -1,9 +1,10 @@
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
+from sqlalchemy import exists, select
 from ..database import get_db
 from ..models.user import User, UserRole
-from ..models.project import Project
+from ..models.project import Project, project_members
 from ..services.auth import decode_token
 
 security = HTTPBearer()
@@ -56,23 +57,39 @@ def get_accessible_project(
     require_ownership: bool = False,
 ) -> Project:
     """
-    Return project if the current user owns it or is a member.
-    Raises 404 if project doesn't exist, 403 if not authorized.
-    Using 404 even for 'found but no access' prevents enumeration attacks.
+    Kullanıcının projeye sahip veya üye olup olmadığını kontrol eder.
+    Proje yoksa 404, yetkisiz ise de 404 döner (enumeration saldırısını önler).
+
+    PERFORMANCE: Üyelik kontrolü için Python'da döngü yerine EXISTS subquery
+    kullanılır — büyük ekiplerde O(1) DB sorgusu, O(n) Python döngüsü değil.
     """
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
     is_owner = project.owner_id == current_user.id
-    is_member = any(m.id == current_user.id for m in project.members)
     is_admin = current_user.role == UserRole.admin
 
     if require_ownership:
         if not (is_owner or is_admin):
             raise HTTPException(status_code=404, detail="Project not found")
-    else:
-        if not (is_owner or is_member or is_admin):
-            raise HTTPException(status_code=404, detail="Project not found")
+        return project
+
+    if is_owner or is_admin:
+        return project
+
+    # PERFORMANCE FIX: Python döngüsü yerine DB'de EXISTS sorgusu
+    # Eski kod: any(m.id == current_user.id for m in project.members)
+    # → tüm üyeleri belleğe yüklüyordu, O(n) Python karşılaştırması
+    # Yeni kod: tek satır SQL EXISTS — indeksli, O(log n)
+    is_member = db.query(
+        exists().where(
+            (project_members.c.project_id == project_id) &
+            (project_members.c.user_id == current_user.id)
+        )
+    ).scalar()
+
+    if not is_member:
+        raise HTTPException(status_code=404, detail="Project not found")
 
     return project

@@ -40,6 +40,7 @@ def get_asset_comments(
         db.query(Comment)
         .filter(Comment.asset_id == asset_id, Comment.parent_id == None)
         .order_by(Comment.created_at.asc())
+        .limit(500)  # Sınırsız büyümeyi önle — 500'den fazla yorum nadir
         .all()
     )
     return comments

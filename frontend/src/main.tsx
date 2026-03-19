@@ -8,7 +8,20 @@ import './index.css'
 
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { retry: 1, staleTime: 30000 },
+    queries: {
+      // İlk başarısız istekte 1 kez yeniden dene
+      retry: 1,
+      // Veri 5 dk boyunca "taze" sayılır — gereksiz ağ isteklerini önler
+      staleTime: 5 * 60 * 1000,
+      // Veri 10 dk cache'de kalır (bileşen unmount sonrası)
+      gcTime: 10 * 60 * 1000,
+      // Pencere odaklanınca otomatik yenilemeyi kapat (fazla ağ trafiği)
+      // Sayfalar kendi staleTime'larına göre yenilenecek
+      refetchOnWindowFocus: false,
+    },
+    mutations: {
+      retry: 0,
+    },
   },
 })
 
@@ -20,10 +33,12 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <Toaster
           position="bottom-right"
           toastOptions={{
+            duration: 3500,
             style: {
               background: '#1e2130',
               color: '#e2e8f0',
               border: '1px solid #2e3145',
+              fontSize: '13px',
             },
           }}
         />

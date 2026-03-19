@@ -1,16 +1,26 @@
-import { useState } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Upload, Grid3X3, List, Filter, RefreshCw, Folder } from 'lucide-react'
+import { Upload, Grid3X3, List, RefreshCw, Folder } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../utils/api'
 import type { Asset, Project } from '../types'
 import AssetCard from '../components/assets/AssetCard'
 import UploadZone from '../components/assets/UploadZone'
 import clsx from 'clsx'
+import { useDebounce } from '../utils/useDebounce'
 
-const STATUS_FILTERS = ['all', 'pending', 'processing', 'ready', 'approved', 'rejected']
-const TYPE_FILTERS = ['all', 'image', 'video', 'audio', 'document', 'other']
+const STATUS_FILTERS = ['all', 'pending', 'approved', 'rejected'] as const
+const TYPE_FILTERS = ['all', 'image', 'video', 'audio', 'document', 'other'] as const
+
+const STATUS_LABELS: Record<string, string> = {
+  all: 'Tümü', pending: 'Bekliyor', approved: 'Onaylı',
+  rejected: 'Reddedildi', processing: 'İşleniyor', ready: 'Hazır',
+}
+const TYPE_LABELS: Record<string, string> = {
+  all: 'Tüm türler', image: 'Görüntü', video: 'Video',
+  audio: 'Ses', document: 'Belge', other: 'Diğer',
+}
 
 export default function ProjectPage() {
   const { projectId } = useParams<{ projectId: string }>()
@@ -20,7 +30,11 @@ export default function ProjectPage() {
   const [showUpload, setShowUpload] = useState(false)
   const [statusFilter, setStatusFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
-  const [search, setSearch] = useState('')
+  const [searchInput, setSearchInput] = useState('')
+
+  // Debounce: arama sorgusunu kullanıcı yazmayı 400ms duraksatana kadar erteye
+  // — her tuş vuruşunda API çağrısını önler
+  const search = useDebounce(searchInput, 400)
 
   const { data: project } = useQuery<Project>({
     queryKey: ['project', projectId],
@@ -36,19 +50,33 @@ export default function ProjectPage() {
       if (search) params.search = search
       return api.get(`/assets/project/${projectId}`, { params }).then((r) => r.data)
     },
+    // search değeri debounce edildiği için stale verisini biraz daha uzun tut
+    staleTime: 60_000,
   })
 
-  const handleUploadSuccess = () => {
+  // useMemo: assets değişmediği sürece sayıları yeniden hesaplama
+  const counts = useMemo(() => ({
+    all: assets?.length ?? 0,
+    pending: assets?.filter((a) => a.status === 'pending').length ?? 0,
+    approved: assets?.filter((a) => a.status === 'approved').length ?? 0,
+    rejected: assets?.filter((a) => a.status === 'rejected').length ?? 0,
+  }), [assets])
+
+  // useCallback: referans kararlılığı — UploadZone yeniden render olmaz
+  const handleUploadSuccess = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['assets', projectId] })
     queryClient.invalidateQueries({ queryKey: ['projects'] })
-  }
+  }, [queryClient, projectId])
 
-  const counts = {
-    all: assets?.length || 0,
-    pending: assets?.filter((a) => a.status === 'pending').length || 0,
-    approved: assets?.filter((a) => a.status === 'approved').length || 0,
-    rejected: assets?.filter((a) => a.status === 'rejected').length || 0,
-  }
+  const handleSetView = useCallback((v: 'grid' | 'list') => setView(v), [])
+  const handleStatusFilter = useCallback((s: string) => setStatusFilter(s), [])
+  const handleTypeFilter = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => setTypeFilter(e.target.value), [])
+
+  // AssetCard click handler factory — useCallback ile sabit referans
+  const handleAssetClick = useCallback(
+    (assetId: number) => () => navigate(`/projects/${projectId}/assets/${assetId}`),
+    [navigate, projectId]
+  )
 
   return (
     <div className="flex flex-col h-full">
@@ -57,39 +85,39 @@ export default function ProjectPage() {
         <div className="flex items-center gap-3 min-w-0">
           <Folder size={18} className="text-brand-400 shrink-0" />
           <div className="min-w-0">
-            <h1 className="text-lg font-bold text-white truncate">{project?.name || 'Project'}</h1>
+            <h1 className="text-lg font-bold text-white truncate">{project?.name || 'Proje'}</h1>
             {project?.description && (
               <p className="text-xs text-slate-500 truncate">{project.description}</p>
             )}
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <button onClick={() => refetch()} className="btn-ghost p-2" title="Refresh">
+          <button onClick={() => refetch()} className="btn-ghost p-2" title="Yenile">
             <RefreshCw size={14} />
           </button>
           <button onClick={() => setShowUpload(true)} className="btn-primary">
             <Upload size={14} />
-            Upload
+            Yükle
           </button>
         </div>
       </div>
 
       {/* Toolbar */}
       <div className="px-6 py-3 border-b border-surface-300 flex items-center gap-3 flex-wrap shrink-0">
-        {/* Search */}
+        {/* Arama — debounce edilmiş */}
         <input
           className="input flex-1 min-w-48 max-w-xs"
-          placeholder="Search assets..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Asset ara…"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
         />
 
-        {/* Status filter */}
+        {/* Durum filtresi */}
         <div className="flex items-center gap-1">
-          {['all', 'pending', 'approved', 'rejected'].map((s) => (
+          {STATUS_FILTERS.map((s) => (
             <button
               key={s}
-              onClick={() => setStatusFilter(s)}
+              onClick={() => handleStatusFilter(s)}
               className={clsx(
                 'px-3 py-1 rounded-lg text-xs font-medium transition-colors',
                 statusFilter === s
@@ -97,57 +125,50 @@ export default function ProjectPage() {
                   : 'bg-surface-200 text-slate-400 hover:text-slate-200'
               )}
             >
-              {s === 'all' ? `All (${counts.all})` : s.charAt(0).toUpperCase() + s.slice(1)}
+              {s === 'all' ? `${STATUS_LABELS.all} (${counts.all})` : STATUS_LABELS[s]}
+              {s !== 'all' && counts[s as keyof typeof counts] > 0 && (
+                <span className="ml-1 opacity-60">({counts[s as keyof typeof counts]})</span>
+              )}
             </button>
           ))}
         </div>
 
-        {/* Type filter */}
+        {/* Tür filtresi */}
         <select
           value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value)}
+          onChange={handleTypeFilter}
           className="input w-auto py-1 text-xs"
         >
           {TYPE_FILTERS.map((t) => (
-            <option key={t} value={t}>{t === 'all' ? 'All types' : t.charAt(0).toUpperCase() + t.slice(1)}</option>
+            <option key={t} value={t}>{TYPE_LABELS[t]}</option>
           ))}
         </select>
 
-        {/* View toggle */}
+        {/* Görünüm geçişi */}
         <div className="flex bg-surface-200 rounded-lg p-0.5 ml-auto">
           <button
-            onClick={() => setView('grid')}
+            onClick={() => handleSetView('grid')}
             className={clsx('p-1.5 rounded-md transition-colors', view === 'grid' ? 'bg-surface-300 text-white' : 'text-slate-500')}
+            title="Izgara"
           >
             <Grid3X3 size={14} />
           </button>
           <button
-            onClick={() => setView('list')}
+            onClick={() => handleSetView('list')}
             className={clsx('p-1.5 rounded-md transition-colors', view === 'list' ? 'bg-surface-300 text-white' : 'text-slate-500')}
+            title="Liste"
           >
             <List size={14} />
           </button>
         </div>
       </div>
 
-      {/* Assets */}
+      {/* Asset Listesi */}
       <div className="flex-1 overflow-auto p-6">
         {isLoading ? (
-          <div className={view === 'grid' ? 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4' : ''}>
-            {[...Array(8)].map((_, i) => (
-              <div key={i} className="card animate-pulse bg-surface-100 h-40" />
-            ))}
-          </div>
+          <SkeletonGrid view={view} />
         ) : assets?.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 text-center">
-            <Upload size={40} className="text-slate-600 mb-3" />
-            <p className="text-slate-400 font-medium">No assets found</p>
-            <p className="text-slate-500 text-sm mb-4">Upload your first media file</p>
-            <button onClick={() => setShowUpload(true)} className="btn-primary">
-              <Upload size={14} />
-              Upload Assets
-            </button>
-          </div>
+          <EmptyState onUpload={() => setShowUpload(true)} hasFilters={statusFilter !== 'all' || typeFilter !== 'all' || !!search} />
         ) : (
           <div
             className={
@@ -161,7 +182,7 @@ export default function ProjectPage() {
                 key={asset.id}
                 asset={asset}
                 view={view}
-                onClick={() => navigate(`/projects/${projectId}/assets/${asset.id}`)}
+                onClick={handleAssetClick(asset.id)}
               />
             ))}
           </div>
@@ -175,6 +196,38 @@ export default function ProjectPage() {
           onSuccess={handleUploadSuccess}
           onClose={() => setShowUpload(false)}
         />
+      )}
+    </div>
+  )
+}
+
+// ── Yardımcı bileşenler ────────────────────────────────────────────────────────
+
+function SkeletonGrid({ view }: { view: 'grid' | 'list' }) {
+  return (
+    <div className={view === 'grid' ? 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4' : 'space-y-2'}>
+      {[...Array(8)].map((_, i) => (
+        <div key={i} className="card animate-pulse bg-surface-100 h-40" />
+      ))}
+    </div>
+  )
+}
+
+function EmptyState({ onUpload, hasFilters }: { onUpload: () => void; hasFilters: boolean }) {
+  return (
+    <div className="flex flex-col items-center justify-center h-64 text-center">
+      <Upload size={40} className="text-slate-600 mb-3" />
+      <p className="text-slate-400 font-medium">
+        {hasFilters ? 'Filtreyle eşleşen asset bulunamadı' : 'Henüz asset yok'}
+      </p>
+      {!hasFilters && (
+        <>
+          <p className="text-slate-500 text-sm mb-4">İlk medya dosyanı yükle</p>
+          <button onClick={onUpload} className="btn-primary">
+            <Upload size={14} />
+            Asset Yükle
+          </button>
+        </>
       )}
     </div>
   )

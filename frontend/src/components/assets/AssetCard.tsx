@@ -1,8 +1,10 @@
-import { Image, Video, Music, FileText, File, CheckCircle, XCircle, Clock, Loader2, MoreVertical, Tag, MessageSquare } from 'lucide-react'
+import { memo } from 'react'
+import { Image, Video, Music, FileText, File, CheckCircle, XCircle, Clock, Loader2, Tag, MessageSquare } from 'lucide-react'
 import type { Asset } from '../../types'
 import { formatFileSize } from '../../utils/format'
 import clsx from 'clsx'
 
+// Sabitler bileşen dışında — her render'da yeniden oluşturulmazlar.
 const TYPE_ICONS: Record<string, React.ReactNode> = {
   image: <Image size={20} />,
   video: <Video size={20} />,
@@ -11,12 +13,12 @@ const TYPE_ICONS: Record<string, React.ReactNode> = {
   other: <File size={20} />,
 }
 
-const STATUS_CONFIG = {
-  pending: { label: 'Pending', className: 'status-pending', icon: <Clock size={10} /> },
-  processing: { label: 'Processing', className: 'status-processing', icon: <Loader2 size={10} className="animate-spin" /> },
-  ready: { label: 'Ready', className: 'status-ready', icon: null },
-  approved: { label: 'Approved', className: 'status-approved', icon: <CheckCircle size={10} /> },
-  rejected: { label: 'Rejected', className: 'status-rejected', icon: <XCircle size={10} /> },
+const STATUS_CONFIG: Record<string, { label: string; className: string; icon: React.ReactNode }> = {
+  pending: { label: 'Bekliyor', className: 'status-pending', icon: <Clock size={10} /> },
+  processing: { label: 'İşleniyor', className: 'status-processing', icon: <Loader2 size={10} className="animate-spin" /> },
+  ready: { label: 'Hazır', className: 'status-ready', icon: null },
+  approved: { label: 'Onaylandı', className: 'status-approved', icon: <CheckCircle size={10} /> },
+  rejected: { label: 'Reddedildi', className: 'status-rejected', icon: <XCircle size={10} /> },
 }
 
 interface Props {
@@ -25,8 +27,11 @@ interface Props {
   view?: 'grid' | 'list'
 }
 
-export default function AssetCard({ asset, onClick, view = 'grid' }: Props) {
-  const statusConf = STATUS_CONFIG[asset.status]
+// React.memo: props değişmediği sürece re-render yapmaz.
+// Üst bileşen yeniden render edilse bile (örn. filtre değişimi) AssetCard'lar
+// yalnızca kendi asset'leri değiştiğinde güncellenir.
+const AssetCard = memo(function AssetCard({ asset, onClick, view = 'grid' }: Props) {
+  const statusConf = STATUS_CONFIG[asset.status] ?? STATUS_CONFIG.ready
   const assetUrl = `/files/${asset.project_id}/${asset.filename}`
 
   if (view === 'list') {
@@ -35,17 +40,26 @@ export default function AssetCard({ asset, onClick, view = 'grid' }: Props) {
         onClick={onClick}
         className="flex items-center gap-4 px-4 py-3 w-full text-left hover:bg-surface-200 transition-colors border-b border-surface-300/50 last:border-0"
       >
+        {/* Thumbnail küçük */}
         <div className="w-10 h-10 rounded-lg bg-surface-200 flex items-center justify-center text-slate-500 shrink-0 overflow-hidden">
           {asset.asset_type === 'image' ? (
-            <img src={assetUrl} alt={asset.original_name} className="w-full h-full object-cover" />
+            <img
+              src={assetUrl}
+              alt=""
+              className="w-full h-full object-cover"
+              loading="lazy"
+              decoding="async"
+            />
           ) : (
             TYPE_ICONS[asset.asset_type]
           )}
         </div>
+
         <div className="flex-1 min-w-0">
           <p className="text-sm text-white font-medium truncate">{asset.original_name}</p>
           <p className="text-xs text-slate-500 truncate">{asset.ai_description || asset.mime_type}</p>
         </div>
+
         <div className="flex items-center gap-3 shrink-0">
           {asset.comment_count > 0 && (
             <span className="flex items-center gap-1 text-xs text-slate-500">
@@ -73,20 +87,24 @@ export default function AssetCard({ asset, onClick, view = 'grid' }: Props) {
         {asset.asset_type === 'image' ? (
           <img
             src={assetUrl}
-            alt={asset.original_name}
+            alt=""
             className="w-full h-full object-cover"
             loading="lazy"
+            decoding="async"
           />
         ) : (
           <div className="text-slate-600">{TYPE_ICONS[asset.asset_type]}</div>
         )}
-        {/* Status badge overlay */}
+
+        {/* Status badge */}
         <div className="absolute top-2 right-2">
           <span className={statusConf.className}>
             {statusConf.icon}
             {statusConf.label}
           </span>
         </div>
+
+        {/* AI badge */}
         {asset.ai_tags && asset.ai_tags.length > 0 && (
           <div className="absolute bottom-2 left-2">
             <span className="badge bg-brand-600/80 text-brand-200">
@@ -117,4 +135,6 @@ export default function AssetCard({ asset, onClick, view = 'grid' }: Props) {
       </div>
     </button>
   )
-}
+})
+
+export default AssetCard
