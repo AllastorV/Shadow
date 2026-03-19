@@ -1,0 +1,77 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    @apply bg-surface text-slate-100 font-sans antialiased;
+    min-height: 100vh;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-surface-50;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-surface-300 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-500;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-surface-200 hover:bg-surface-300 text-slate-200 text-sm font-medium transition-colors;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-surface-200 text-slate-400 hover:text-slate-200 text-sm transition-colors;
+  }
+
+  .card {
+    @apply bg-surface-50 rounded-xl border border-surface-300 overflow-hidden;
+  }
+
+  .input {
+    @apply w-full px-3 py-2 rounded-lg bg-surface-100 border border-surface-300 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 text-sm transition-colors;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .status-pending {
+    @apply badge bg-amber-500/20 text-amber-400;
+  }
+
+  .status-processing {
+    @apply badge bg-blue-500/20 text-blue-400;
+  }
+
+  .status-ready {
+    @apply badge bg-slate-500/20 text-slate-400;
+  }
+
+  .status-approved {
+    @apply badge bg-emerald-500/20 text-emerald-400;
+  }
+
+  .status-rejected {
+    @apply badge bg-red-500/20 text-red-400;
+  }
+}
