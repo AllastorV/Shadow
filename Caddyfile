@@ -19,10 +19,19 @@
     }
 
     # API — FastAPI backend
+    # request_body max_size 0 = unlimited; backend enforces role-based limits (150 GB / admin unlimited)
     handle /api/* {
+        request_body {
+            max_size 0
+        }
         reverse_proxy backend:8000 {
             header_up X-Forwarded-Proto https
             header_up X-Real-IP {remote_host}
+            # Large file uploads can take hours — no proxy timeout
+            transport http {
+                read_timeout  0
+                write_timeout 0
+            }
         }
     }
 

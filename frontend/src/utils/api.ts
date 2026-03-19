@@ -3,8 +3,9 @@ import { useAuthStore } from '../store/auth'
 
 const api = axios.create({
   baseURL: '/api/v1',
-  // SECURITY: Set reasonable timeout to prevent hanging requests
-  timeout: 30000,
+  // timeout: 0 — no global timeout; upload requests can take hours for large files.
+  // Individual non-upload requests can set their own timeout via config.
+  timeout: 0,
   headers: {
     'Content-Type': 'application/json',
   },

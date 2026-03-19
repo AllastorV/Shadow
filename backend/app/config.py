@@ -12,7 +12,8 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
     UPLOAD_DIR: str = str(Path(__file__).parent.parent / "uploads")
-    MAX_UPLOAD_SIZE: int = 500 * 1024 * 1024  # 500MB
+    # Editor limiti (bayt). Admin için bu limit uygulanmaz.
+    MAX_UPLOAD_SIZE: int = 150 * 1024 * 1024 * 1024  # 150 GB
     ANTHROPIC_API_KEY: str = ""
 
     # ── Local AI (Ollama) ayarları ────────────────────────────────────────────

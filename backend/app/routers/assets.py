@@ -264,22 +264,6 @@ async def upload_assets(
                 detail=f"File type '{declared_mime}' is not allowed. Permitted types: images, video, audio, PDF.",
             )
 
-        content = await file.read()
-
-        # SECURITY: Check file size
-        if len(content) > settings.MAX_UPLOAD_SIZE:
-            raise HTTPException(status_code=413, detail="File exceeds maximum upload size (500MB)")
-
-        if not content:
-            raise HTTPException(status_code=400, detail="Empty file not allowed")
-
-        # SECURITY: Validate magic bytes (prevent MIME spoofing)
-        if not _validate_file_content(content, declared_mime):
-            raise HTTPException(
-                status_code=415,
-                detail="File content does not match declared type",
-            )
-
         # SECURITY: Sanitize extension — never trust client filename
         ext = _sanitize_extension(file.filename or "")
         if not ext:
@@ -292,16 +276,64 @@ async def upload_assets(
         safe_filename = f"{uuid.uuid4()}{ext}"
         file_path = upload_dir / safe_filename
 
-        with open(file_path, "wb") as f:
-            f.write(content)
+        # ── Streaming write — büyük dosyaları RAM'e yüklemeden diske yaz ──────
+        # Admin için boyut sınırı yok; diğerleri için MAX_UPLOAD_SIZE geçerli.
+        from ..models.user import UserRole as _UserRole
+        is_admin   = current_user.role == _UserRole.admin
+        size_limit = None if is_admin else settings.MAX_UPLOAD_SIZE
+        limit_gb   = size_limit // (1024 ** 3) if size_limit else None
+
+        CHUNK        = 4 * 1024 * 1024   # 4 MB chunk
+        file_size    = 0
+        header_bytes = b""               # Magic bytes için ilk chunk saklanır
+
+        try:
+            with open(file_path, "wb") as fh:
+                while True:
+                    chunk = await file.read(CHUNK)
+                    if not chunk:
+                        break
+                    file_size += len(chunk)
+
+                    # Boyut kontrolü (admin'de atlanır)
+                    if size_limit and file_size > size_limit:
+                        fh.close()
+                        file_path.unlink(missing_ok=True)
+                        raise HTTPException(
+                            status_code=413,
+                            detail=f"Dosya boyutu sınırı aşıldı (maksimum {limit_gb} GB)",
+                        )
+
+                    # İlk chunk'tan magic bytes sakla
+                    if not header_bytes:
+                        header_bytes = chunk
+
+                    fh.write(chunk)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            file_path.unlink(missing_ok=True)
+            raise HTTPException(status_code=500, detail="Dosya yazma hatası") from exc
+
+        if file_size == 0:
+            file_path.unlink(missing_ok=True)
+            raise HTTPException(status_code=400, detail="Boş dosya yüklenemez")
+
+        # SECURITY: Magic bytes doğrulaması (yalnızca header_bytes yeterli)
+        if not _validate_file_content(header_bytes, declared_mime):
+            file_path.unlink(missing_ok=True)
+            raise HTTPException(
+                status_code=415,
+                detail="Dosya içeriği bildirilen türle eşleşmiyor",
+            )
 
         asset_type = ALLOWED_MIME_TYPES[declared_mime]
 
         asset = Asset(
             filename=safe_filename,
-            original_name=Path(file.filename or "unknown").name[:255],  # Limit length
+            original_name=Path(file.filename or "unknown").name[:255],
             file_path=str(file_path),
-            file_size=len(content),
+            file_size=file_size,
             mime_type=declared_mime,
             asset_type=asset_type,
             status=AssetStatus.pending,

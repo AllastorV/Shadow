@@ -37,7 +37,7 @@ export default function UploadZone({ projectId, onSuccess, onClose }: Props) {
       'audio/*': [],
       'application/pdf': [],
     },
-    maxSize: 500 * 1024 * 1024,
+    maxSize: 150 * 1024 * 1024 * 1024, // 150 GB (admin has no limit server-side)
   })
 
   const removeFile = (index: number) => {
@@ -92,7 +92,7 @@ export default function UploadZone({ projectId, onSuccess, onClose }: Props) {
             <input {...getInputProps()} />
             <Upload size={32} className="text-slate-500 mx-auto mb-3" />
             <p className="text-slate-300 font-medium">Drop files here</p>
-            <p className="text-slate-500 text-sm mt-1">Images, videos, audio, PDFs · Max 500MB</p>
+            <p className="text-slate-500 text-sm mt-1">Images, videos, audio, PDFs · Maks 150 GB (Admin: sınırsız)</p>
           </div>
 
           {/* File list */}
