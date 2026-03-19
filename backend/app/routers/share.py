@@ -1,15 +1,21 @@
 import logging
+import os
 import secrets
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+
+from ..config import settings
 from ..database import get_db
-from ..models.user import User, UserRole
-from ..models.share_link import ShareLink, SharePermission
 from ..models.asset import Asset
+from ..models.share_link import ShareLink, SharePermission
+from ..models.user import User, UserRole
 from ..schemas.share_link import ShareLinkCreate, ShareLinkResponse
 from ..utils.dependencies import get_current_user, require_editor, get_accessible_project
 
@@ -18,11 +24,86 @@ router = APIRouter(prefix="/share", tags=["share"])
 limiter = Limiter(key_func=get_remote_address)
 
 
+# ── Yardımcı ──────────────────────────────────────────────────────────────────
+
 def _check_share_link_owner(link: ShareLink, current_user: User) -> None:
-    """Ensure only the link creator or admin can manage this link."""
+    """Sadece link sahibi veya admin yönetebilir."""
     if link.created_by_id != current_user.id and current_user.role != UserRole.admin:
         raise HTTPException(status_code=404, detail="Share link not found")
 
+
+def _validate_token_format(token: str) -> None:
+    """Token formatını doğrula — enjeksiyon saldırılarını engelle."""
+    if not token or len(token) > 64:
+        raise HTTPException(status_code=404, detail="Invalid token")
+    # URL-safe base64: yalnızca harf, rakam, -, _
+    allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
+    if not all(c in allowed for c in token):
+        raise HTTPException(status_code=404, detail="Invalid token")
+
+
+def _resolve_and_validate_link(
+    token: str,
+    db: Session,
+    password: Optional[str] = None,
+) -> tuple[ShareLink, Asset]:
+    """
+    Token'ı doğrula, aktiflik/süre/parola kontrolü yap.
+    Başarılıysa (link, asset) döndür.
+    SECURITY: Tüm hata mesajları jenerik — token/parola varlığını sızdırmaz.
+    """
+    _validate_token_format(token)
+
+    link = db.query(ShareLink).filter(
+        ShareLink.token == token,
+        ShareLink.is_active == True,
+    ).first()
+    if not link:
+        raise HTTPException(status_code=404, detail="Share link not found or inactive")
+
+    # Süre kontrolü
+    if link.expires_at:
+        now = datetime.now(timezone.utc)
+        exp = (
+            link.expires_at.replace(tzinfo=timezone.utc)
+            if link.expires_at.tzinfo is None
+            else link.expires_at
+        )
+        if now > exp:
+            raise HTTPException(status_code=410, detail="Share link has expired")
+
+    # Parola kontrolü
+    if link.password_hash:
+        if not password:
+            raise HTTPException(status_code=401, detail="Password required")
+        from ..services.auth import verify_password
+        if not verify_password(password, link.password_hash):
+            raise HTTPException(status_code=401, detail="Authentication failed")
+
+    asset = link.asset
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    return link, asset
+
+
+def _log_activity(link: ShareLink, action: str, request: Request, db: Session) -> None:
+    """IP hash ile aktivite kaydı — ham IP saklanmaz (gizlilik)."""
+    import hashlib
+    client_ip = request.client.host if request.client else "unknown"
+    ip_hash = hashlib.sha256(client_ip.encode()).hexdigest()[:16]
+    entry = {
+        "action": action,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "ip_hash": ip_hash,
+    }
+    log = list(link.activity_log or [])
+    if len(log) < 1000:  # Sınırsız büyümeyi önle
+        log.append(entry)
+    link.activity_log = log
+
+
+# ── Paylaşım linki oluştur ────────────────────────────────────────────────────
 
 @router.post("/asset/{asset_id}", response_model=ShareLinkResponse, status_code=201)
 @limiter.limit("20/minute")
@@ -37,7 +118,7 @@ def create_share_link(
     asset = db.query(Asset).filter(Asset.id == asset_id).first()
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
-    # SECURITY: Verify user has access to the project
+    # SECURITY: Projeye erişim doğrula
     get_accessible_project(asset.project_id, current_user, db)
 
     password_hash = None
@@ -46,7 +127,7 @@ def create_share_link(
         password_hash = hash_password(data.password)
 
     link = ShareLink(
-        token=secrets.token_urlsafe(32),  # 32 bytes = 256-bit entropy
+        token=secrets.token_urlsafe(32),  # 256-bit entropi
         label=label,
         permission=data.permission,
         expires_at=data.expires_at,
@@ -62,6 +143,8 @@ def create_share_link(
     return link
 
 
+# ── Asset'in paylaşım linklerini listele ─────────────────────────────────────
+
 @router.get("/asset/{asset_id}", response_model=List[ShareLinkResponse])
 @limiter.limit("60/minute")
 def list_share_links(
@@ -73,77 +156,38 @@ def list_share_links(
     asset = db.query(Asset).filter(Asset.id == asset_id).first()
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
-    # SECURITY: Verify user can access the project
     get_accessible_project(asset.project_id, current_user, db)
 
-    # Regular users only see their own links; admins see all
     query = db.query(ShareLink).filter(ShareLink.asset_id == asset_id)
     if current_user.role != UserRole.admin:
         query = query.filter(ShareLink.created_by_id == current_user.id)
 
-    return query.all()
+    return query.order_by(ShareLink.created_at.desc()).all()
 
+
+# ── Paylaşılan asset meta verisi ─────────────────────────────────────────────
 
 @router.get("/view/{token}")
-@limiter.limit("30/minute")
+@limiter.limit("20/minute")
 def view_shared_asset(
     request: Request,
     token: str,
-    password: Optional[str] = Query(None),
+    password: Optional[str] = Query(None, max_length=128),
     db: Session = Depends(get_db),
 ):
     """
-    Public endpoint to view a shared asset.
-    No authentication required — access controlled by token + optional password.
+    Herkese açık — token + isteğe bağlı parola ile erişim.
+    Kimlik doğrulama gerektirmez.
     """
-    # SECURITY: Validate token format to prevent injection
-    if not token or len(token) > 64 or not token.replace("-", "").replace("_", "").isalnum():
-        raise HTTPException(status_code=404, detail="Invalid token")
+    link, asset = _resolve_and_validate_link(token, db, password)
 
-    link = db.query(ShareLink).filter(
-        ShareLink.token == token,
-        ShareLink.is_active == True,
-    ).first()
-    if not link:
-        raise HTTPException(status_code=404, detail="Share link not found or inactive")
-
-    # SECURITY: Check expiry
-    if link.expires_at:
-        now = datetime.now(timezone.utc)
-        exp = link.expires_at.replace(tzinfo=timezone.utc) if link.expires_at.tzinfo is None else link.expires_at
-        if now > exp:
-            raise HTTPException(status_code=410, detail="Share link has expired")
-
-    # SECURITY: Password check
-    if link.password_hash:
-        if not password:
-            raise HTTPException(status_code=401, detail="Password required")
-        from ..services.auth import verify_password
-        if not verify_password(password, link.password_hash):
-            # Generic error — don't indicate whether password is wrong vs not provided
-            raise HTTPException(status_code=401, detail="Invalid password")
-
-    # Log activity (store IP hash, not raw IP for privacy)
-    import hashlib
-    client_ip = request.client.host if request.client else "unknown"
-    ip_hash = hashlib.sha256(client_ip.encode()).hexdigest()[:16]
-
-    activity_entry = {
-        "action": "viewed",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "ip_hash": ip_hash,
-    }
-    log = link.activity_log or []
-    # Cap log at 1000 entries to prevent unbounded growth
-    if len(log) < 1000:
-        log.append(activity_entry)
-    link.activity_log = log
+    # Aktivite kaydet + görüntülenme sayacı
+    _log_activity(link, "viewed", request, db)
     link.view_count = (link.view_count or 0) + 1
     db.commit()
 
-    asset = link.asset
-    if not asset:
-        raise HTTPException(status_code=404, detail="Asset not found")
+    # Parola parametresini dosya URL'lerine ekle
+    pw_suffix = f"?password={password}" if password else ""
 
     return {
         "asset": {
@@ -151,13 +195,97 @@ def view_shared_asset(
             "name": asset.original_name,
             "type": asset.asset_type,
             "mime_type": asset.mime_type,
+            "file_size": asset.file_size,
+            "width": asset.width,
+            "height": asset.height,
+            "duration": asset.duration,
+            # AI metadata
             "ai_description": asset.ai_description,
-            "ai_tags": asset.ai_tags,
+            "ai_tags": asset.ai_tags or [],
+            "ai_colors": asset.ai_colors or [],
+            "ai_scene_type": asset.ai_scene_type,
+            # Sinema metadata
+            "shot_scale": asset.shot_scale,
+            "camera_angle": asset.camera_angle,
+            "camera_movement": asset.camera_movement,
+            "lighting_type": asset.lighting_type,
+            "color_tone": asset.color_tone,
+            "composition_tags": asset.composition_tags or [],
+            "subject_tags": asset.subject_tags or [],
+            "mood_tags": asset.mood_tags or [],
         },
         "permission": link.permission,
         "label": link.label,
+        "has_password": bool(link.password_hash),
+        "expires_at": link.expires_at.isoformat() if link.expires_at else None,
+        # Dosya URL'leri — token ile güvenli erişim
+        "file_url": f"/api/v1/share/file/{token}{pw_suffix}",
+        "download_url": f"/api/v1/share/file/{token}?dl=1{('&password=' + password) if password else ''}",
     }
 
+
+# ── Token tabanlı dosya sunumu ────────────────────────────────────────────────
+
+@router.get("/file/{token}")
+@limiter.limit("60/minute")
+async def serve_shared_file(
+    request: Request,
+    token: str,
+    password: Optional[str] = Query(None, max_length=128),
+    dl: int = Query(0),  # 1 = indirme (Content-Disposition: attachment)
+    db: Session = Depends(get_db),
+):
+    """
+    Token tabanlı dosya sunumu — kimlik doğrulama gerektirmez.
+    Görsel önizleme (inline) ve dosya indirme (dl=1) için kullanılır.
+
+    SECURITY:
+    - Token formatı doğrulandı
+    - Aktiflik/süre/parola kontrolü
+    - Path traversal koruması (uploads dizini dışına çıkamaz)
+    - İndirme sayacı güncelleniyor
+    """
+    link, asset = _resolve_and_validate_link(token, db, password)
+
+    # PATH TRAVERSAL KORUMASI
+    upload_dir = Path(settings.UPLOAD_DIR).resolve()
+    file_path = Path(asset.file_path).resolve()
+    if not str(file_path).startswith(str(upload_dir)):
+        logger.error(
+            f"Path traversal attempt! token={token[:8]}... path={asset.file_path}"
+        )
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+
+    # İndirme izni kontrolü
+    if dl and link.permission not in (SharePermission.download,):
+        raise HTTPException(status_code=403, detail="Download not permitted for this link")
+
+    # Aktivite ve sayaç
+    action = "downloaded" if dl else "file_viewed"
+    _log_activity(link, action, request, db)
+    if dl:
+        link.download_count = (link.download_count or 0) + 1
+    db.commit()
+
+    disposition = "attachment" if dl else "inline"
+    # Dosya adını RFC 5987 uyumlu kodla
+    safe_name = asset.original_name.encode("ascii", "ignore").decode()
+
+    return FileResponse(
+        str(file_path),
+        media_type=asset.mime_type,
+        headers={
+            "Content-Disposition": f'{disposition}; filename="{safe_name}"',
+            # Cache: 5 dakika (token geçerli olduğu sürece)
+            "Cache-Control": "private, max-age=300",
+        },
+    )
+
+
+# ── Link iptal et ─────────────────────────────────────────────────────────────
 
 @router.patch("/{link_id}/revoke", response_model=ShareLinkResponse)
 @limiter.limit("20/minute")
@@ -170,7 +298,6 @@ def revoke_share_link(
     link = db.query(ShareLink).filter(ShareLink.id == link_id).first()
     if not link:
         raise HTTPException(status_code=404, detail="Share link not found")
-    # SECURITY: Only the link creator or an admin can revoke
     _check_share_link_owner(link, current_user)
 
     link.is_active = False
@@ -178,6 +305,8 @@ def revoke_share_link(
     db.refresh(link)
     return link
 
+
+# ── Aktivite logu ─────────────────────────────────────────────────────────────
 
 @router.get("/{link_id}/activity")
 @limiter.limit("30/minute")
@@ -190,7 +319,6 @@ def get_link_activity(
     link = db.query(ShareLink).filter(ShareLink.id == link_id).first()
     if not link:
         raise HTTPException(status_code=404, detail="Share link not found")
-    # SECURITY: Only the creator or admin can view activity
     _check_share_link_owner(link, current_user)
 
     return {

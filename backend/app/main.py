@@ -11,10 +11,10 @@ from .database import Base, engine
 from .routers import auth, projects, assets, comments, share
 from .config import settings
 
-# Create tables
+# Tablo oluştur
 Base.metadata.create_all(bind=engine)
 
-# Ensure upload dir exists
+# Upload dizinini oluştur
 Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
 
 logging.basicConfig(
@@ -30,7 +30,7 @@ app = FastAPI(
     title="Shadow — AI Media Asset Management",
     description="AI-powered Digital Asset Management platform",
     version="1.0.0",
-    # SECURITY: Disable /docs and /redoc in production
+    # SECURITY: Prodüksiyonda /docs ve /redoc kapat:
     # docs_url=None, redoc_url=None,
 )
 
@@ -38,7 +38,7 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS — only allow configured origins
+# CORS — yalnızca yapılandırılmış kaynaklara izin ver
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins_list,
@@ -51,13 +51,17 @@ app.add_middleware(
 
 @app.middleware("http")
 async def security_headers_middleware(request: Request, call_next):
-    """Add security headers to every response."""
+    """Her yanıta güvenlik başlıkları ekle."""
     response: Response = await call_next(request)
+
+    # XSS / clickjacking / sniff koruması
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+
+    # CSP: medya (img/video/audio) hem API hem static /files/'den yüklenebilir
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "img-src 'self' data: blob:; "
@@ -65,16 +69,23 @@ async def security_headers_middleware(request: Request, call_next):
         "script-src 'self'; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com; "
-        "connect-src 'self';"
+        "connect-src 'self'; "
+        "frame-ancestors 'none';"
     )
-    # SECURITY: Remove server fingerprinting headers
+
+    # HSTS: HTTPS zorunlu (1 yıl, alt alan adları dahil)
+    # Sadece prodüksiyonda etkinleştir (HTTP geliştirme için devre dışı)
+    # response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+
+    # Server parmak izi gizle
     response.headers.pop("Server", None)
+    response.headers.pop("X-Powered-By", None)
     return response
 
 
 @app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception):
-    """Global exception handler — never leak stack traces to clients."""
+    """Global hata yöneticisi — istemciye stack trace sızdırma."""
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
     return JSONResponse(
         status_code=500,
@@ -82,7 +93,12 @@ async def generic_exception_handler(request: Request, exc: Exception):
     )
 
 
-# Mount uploads directory for static file serving
+# SECURITY NOTE: /files/ static mount UUID dosya adları kullanır (256-bit entropi).
+# Dosya yolu tahmin etmek pratikte imkansız. Ancak prodüksiyonda tüm dosya
+# erişimini /api/v1/assets/{id}/download veya /api/v1/share/file/{token}
+# üzerinden yönetmek daha güvenlidir.
+# Şu an: Kimlik doğrulamalı assetler bu yolla yükleniyor (video/audio streaming için gerekli).
+# Paylaşım linkleri: /api/v1/share/file/{token} kullanır (token doğrulama + path traversal koruması).
 uploads_path = Path(settings.UPLOAD_DIR)
 if uploads_path.exists():
     app.mount("/files", StaticFiles(directory=str(uploads_path)), name="files")

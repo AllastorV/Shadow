@@ -3,8 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Tag, Sparkles, CheckCircle, XCircle, Clock, Download,
-  Share2, MessageSquare, Image, Video, Music, FileText, File,
-  Loader2, Link2, Lock, Calendar, Eye, DownloadCloud
+  Share2, MessageSquare, Image, Video, Music, FileText,
+  Loader2, Link2, Lock, Calendar, Eye, Copy, CheckCheck,
+  Trash2, DownloadCloud,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../utils/api'
@@ -46,11 +47,11 @@ export default function AssetDetailPage() {
 
   const aiTagMutation = useMutation({
     mutationFn: () => api.post(`/assets/${assetId}/ai-tag`).then((r) => r.data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['asset', assetId] })
-      toast.success('AI tags updated!')
+    onSuccess: (updated: Asset) => {
+      queryClient.setQueryData(['asset', assetId], updated)
+      toast.success('AI etiketler güncellendi!')
     },
-    onError: () => toast.error('AI tagging failed'),
+    onError: () => toast.error('AI etiketleme başarısız'),
   })
 
   const statusMutation = useMutation({
@@ -78,18 +79,25 @@ export default function AssetDetailPage() {
         expires_at: shareExpiry || null,
         password: sharePassword || null,
       }, { params: { label: shareLabel || undefined } }).then((r) => r.data),
-    onSuccess: () => {
+    onSuccess: (newLink) => {
       queryClient.invalidateQueries({ queryKey: ['shareLinks', assetId] })
-      toast.success('Share link created!')
+      const url = `${window.location.origin}/share/${newLink.token}`
+      navigator.clipboard.writeText(url).catch(() => {})
+      toast.success('Link oluşturuldu ve panoya kopyalandı!')
       setShareLabel('')
       setSharePassword('')
       setShareExpiry('')
     },
+    onError: () => toast.error('Link oluşturulamadı'),
   })
 
   const revokeMutation = useMutation({
     mutationFn: (linkId: number) => api.patch(`/share/${linkId}/revoke`).then((r) => r.data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['shareLinks', assetId] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['shareLinks', assetId] })
+      toast.success('Link iptal edildi')
+    },
+    onError: () => toast.error('İptal işlemi başarısız'),
   })
 
   if (isLoading) return (
@@ -100,7 +108,10 @@ export default function AssetDetailPage() {
 
   if (!asset) return <div className="p-6 text-slate-400">Asset not found</div>
 
+  // Kimlik doğrulamalı dosya URL'i (video/audio streaming için /files/ static mount)
   const assetUrl = `/files/${asset.project_id}/${asset.filename}`
+  // İndirme: kimlik doğrulamalı endpoint
+  const downloadUrl = `/api/v1/assets/${assetId}/download`
 
   return (
     <div className="flex h-full">
@@ -148,7 +159,7 @@ export default function AssetDetailPage() {
               <Clock size={13} /> In Review
             </button>
           </div>
-          <a href={assetUrl} download={asset.original_name} className="btn-ghost p-2">
+          <a href={downloadUrl} download={asset.original_name} className="btn-ghost p-2" title="İndir">
             <Download size={15} />
           </a>
         </div>
@@ -180,16 +191,20 @@ export default function AssetDetailPage() {
       <div className="w-80 flex flex-col bg-surface-50 shrink-0">
         {/* Tabs */}
         <div className="flex border-b border-surface-300">
-          {(['info', 'comments', 'share'] as Tab[]).map((t) => (
+          {([
+            { id: 'info', label: 'Bilgi' },
+            { id: 'comments', label: `Yorum${asset.comment_count ? ` (${asset.comment_count})` : ''}` },
+            { id: 'share', label: 'Paylaş' },
+          ] as { id: Tab; label: string }[]).map((t) => (
             <button
-              key={t}
-              onClick={() => setTab(t)}
+              key={t.id}
+              onClick={() => setTab(t.id)}
               className={clsx(
-                'flex-1 py-3 text-xs font-medium transition-colors capitalize',
-                tab === t ? 'text-brand-400 border-b-2 border-brand-500' : 'text-slate-500 hover:text-slate-300'
+                'flex-1 py-3 text-xs font-medium transition-colors',
+                tab === t.id ? 'text-brand-400 border-b-2 border-brand-500' : 'text-slate-500 hover:text-slate-300'
               )}
             >
-              {t === 'comments' ? `Comments (${asset.comment_count})` : t.charAt(0).toUpperCase() + t.slice(1)}
+              {t.label}
             </button>
           ))}
         </div>
@@ -404,68 +419,63 @@ export default function AssetDetailPage() {
           {/* SHARE TAB */}
           {tab === 'share' && (
             <>
-              {/* Existing links */}
+              {/* Mevcut linkler */}
               {shareLinks && shareLinks.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-xs font-medium text-slate-500">Active Links</p>
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Paylaşım Linkleri</p>
                   {shareLinks.map((link) => (
-                    <div key={link.id} className={clsx('p-3 rounded-lg', link.is_active ? 'bg-surface-100' : 'bg-surface-100 opacity-50')}>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-medium text-slate-300">{link.label || 'Untitled Link'}</span>
-                        <span className={clsx('badge', link.is_active ? 'bg-emerald-500/20 text-emerald-400' : 'bg-surface-300 text-slate-500')}>
-                          {link.is_active ? 'Active' : 'Revoked'}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
-                        <span className="capitalize">{link.permission} permission</span>
-                        <span className="flex items-center gap-1"><Eye size={10} /> {link.view_count}</span>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(`${window.location.origin}/share/${link.token}`)
-                            toast.success('Link copied!')
-                          }}
-                          className="flex-1 btn-ghost text-xs py-1 justify-center"
-                        >
-                          <Link2 size={11} /> Copy Link
-                        </button>
-                        {link.is_active && (
-                          <button
-                            onClick={() => revokeMutation.mutate(link.id)}
-                            className="text-xs text-red-400 hover:text-red-300 px-2"
-                          >
-                            Revoke
-                          </button>
-                        )}
-                      </div>
-                    </div>
+                    <ShareLinkCard
+                      key={link.id}
+                      link={link}
+                      onRevoke={() => revokeMutation.mutate(link.id)}
+                      revoking={revokeMutation.isPending}
+                    />
                   ))}
                 </div>
               )}
 
-              {/* Create new link */}
-              <div className="border-t border-surface-300 pt-4 space-y-3">
-                <p className="text-xs font-medium text-slate-400">Create Share Link</p>
+              {/* Yeni link oluştur */}
+              <div className={clsx('space-y-3', shareLinks && shareLinks.length > 0 && 'border-t border-surface-300 pt-4')}>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Yeni Link Oluştur</p>
                 <div>
-                  <label className="text-xs text-slate-500 mb-1 block">Label</label>
-                  <input className="input text-xs" placeholder="e.g. Client Review" value={shareLabel} onChange={(e) => setShareLabel(e.target.value)} />
+                  <label className="text-xs text-slate-500 mb-1 block">Etiket</label>
+                  <input
+                    className="input text-xs"
+                    placeholder="ör. Müşteri İncelemesi"
+                    value={shareLabel}
+                    onChange={(e) => setShareLabel(e.target.value)}
+                  />
                 </div>
                 <div>
-                  <label className="text-xs text-slate-500 mb-1 block">Permission</label>
+                  <label className="text-xs text-slate-500 mb-1 block">İzin</label>
                   <select className="input text-xs" value={sharePermission} onChange={(e) => setSharePermission(e.target.value as any)}>
-                    <option value="view">View only</option>
-                    <option value="comment">Comment</option>
-                    <option value="download">Download</option>
+                    <option value="view">Yalnızca görüntüle</option>
+                    <option value="comment">Yorum yap</option>
+                    <option value="download">İndir</option>
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs text-slate-500 mb-1 flex items-center gap-1"><Lock size={10} /> Password (optional)</label>
-                  <input className="input text-xs" type="password" placeholder="••••••" value={sharePassword} onChange={(e) => setSharePassword(e.target.value)} />
+                  <label className="text-xs text-slate-500 mb-1 flex items-center gap-1">
+                    <Lock size={10} /> Parola (isteğe bağlı)
+                  </label>
+                  <input
+                    className="input text-xs"
+                    type="password"
+                    placeholder="En az 4 karakter"
+                    value={sharePassword}
+                    onChange={(e) => setSharePassword(e.target.value)}
+                  />
                 </div>
                 <div>
-                  <label className="text-xs text-slate-500 mb-1 flex items-center gap-1"><Calendar size={10} /> Expires (optional)</label>
-                  <input className="input text-xs" type="datetime-local" value={shareExpiry} onChange={(e) => setShareExpiry(e.target.value)} />
+                  <label className="text-xs text-slate-500 mb-1 flex items-center gap-1">
+                    <Calendar size={10} /> Son kullanma tarihi (isteğe bağlı)
+                  </label>
+                  <input
+                    className="input text-xs"
+                    type="datetime-local"
+                    value={shareExpiry}
+                    onChange={(e) => setShareExpiry(e.target.value)}
+                  />
                 </div>
                 <button
                   onClick={() => createShareMutation.mutate()}
@@ -473,12 +483,113 @@ export default function AssetDetailPage() {
                   className="btn-primary w-full justify-center"
                 >
                   <Share2 size={13} />
-                  {createShareMutation.isPending ? 'Creating…' : 'Create Link'}
+                  {createShareMutation.isPending ? 'Oluşturuluyor…' : 'Link Oluştur'}
                 </button>
               </div>
             </>
           )}
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ── ShareLinkCard ──────────────────────────────────────────────────────────────
+
+function ShareLinkCard({
+  link,
+  onRevoke,
+  revoking,
+}: {
+  link: ShareLink
+  onRevoke: () => void
+  revoking: boolean
+}) {
+  const [copied, setCopied] = useState(false)
+  const shareUrl = `${window.location.origin}/share/${link.token}`
+
+  const isExpired = link.expires_at
+    ? new Date(link.expires_at) < new Date()
+    : false
+
+  const copyLink = async () => {
+    await navigator.clipboard.writeText(shareUrl)
+    setCopied(true)
+    toast.success('Link kopyalandı!')
+    setTimeout(() => setCopied(false), 2500)
+  }
+
+  const PERMISSION_CONFIG = {
+    view: { label: 'Görüntüle', color: 'bg-blue-500/20 text-blue-300' },
+    comment: { label: 'Yorum', color: 'bg-purple-500/20 text-purple-300' },
+    download: { label: 'İndir', color: 'bg-emerald-500/20 text-emerald-300' },
+  }
+  const perm = PERMISSION_CONFIG[link.permission as keyof typeof PERMISSION_CONFIG] || PERMISSION_CONFIG.view
+
+  return (
+    <div className={clsx(
+      'rounded-xl border p-3 transition-opacity',
+      link.is_active && !isExpired
+        ? 'bg-surface-100 border-surface-300'
+        : 'bg-surface-100 border-surface-300 opacity-50'
+    )}>
+      {/* Üst satır */}
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <span className="text-xs font-medium text-slate-200 truncate">
+          {link.label || 'Adsız Link'}
+        </span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {isExpired ? (
+            <span className="badge bg-amber-500/20 text-amber-400 flex items-center gap-0.5">
+              <Clock size={9} /> Süresi Doldu
+            </span>
+          ) : !link.is_active ? (
+            <span className="badge bg-surface-300 text-slate-500">İptal Edildi</span>
+          ) : (
+            <span className="badge bg-emerald-500/20 text-emerald-400">Aktif</span>
+          )}
+          <span className={clsx('badge text-[10px]', perm.color)}>{perm.label}</span>
+        </div>
+      </div>
+
+      {/* URL */}
+      <div
+        onClick={copyLink}
+        className="flex items-center gap-2 bg-surface-200 rounded-lg px-2.5 py-1.5 cursor-pointer hover:bg-surface-100 transition-colors mb-2 group"
+        title="Kopyalamak için tıkla"
+      >
+        <Link2 size={11} className="text-slate-500 shrink-0" />
+        <span className="text-xs text-slate-400 truncate flex-1 font-mono">
+          {shareUrl.replace(/^https?:\/\//, '')}
+        </span>
+        {copied
+          ? <CheckCheck size={11} className="text-emerald-400 shrink-0" />
+          : <Copy size={11} className="text-slate-600 group-hover:text-slate-400 shrink-0" />
+        }
+      </div>
+
+      {/* Alt meta */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3 text-[11px] text-slate-600">
+          <span className="flex items-center gap-0.5"><Eye size={10} /> {link.view_count}</span>
+          {link.download_count > 0 && (
+            <span className="flex items-center gap-0.5"><DownloadCloud size={10} /> {link.download_count}</span>
+          )}
+          {link.expires_at && (
+            <span className="flex items-center gap-0.5">
+              <Calendar size={10} /> {new Date(link.expires_at).toLocaleDateString('tr-TR')}
+            </span>
+          )}
+        </div>
+        {link.is_active && !isExpired && (
+          <button
+            onClick={onRevoke}
+            disabled={revoking}
+            className="flex items-center gap-1 text-[11px] text-red-400 hover:text-red-300 transition-colors"
+          >
+            <Trash2 size={10} /> İptal
+          </button>
+        )}
       </div>
     </div>
   )
