@@ -47,6 +47,7 @@ class CommentResponse(BaseModel):
     asset_id: int
     author_id: int
     author: Optional[UserResponse] = None
+    guest_name: Optional[str] = None
     created_at: datetime
 
     class Config:

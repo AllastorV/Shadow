@@ -15,6 +15,9 @@ class Comment(Base):
     is_resolved = Column(Boolean, default=False)
     parent_id = Column(Integer, ForeignKey("comments.id"), nullable=True)
 
+    # Share link üzerinden misafir katkısı için — kayıtlı kullanıcılarda NULL
+    guest_name = Column(String(100), nullable=True)
+
     asset_id = Column(Integer, ForeignKey("assets.id"), nullable=False)
     author_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

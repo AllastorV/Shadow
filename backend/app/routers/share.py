@@ -11,13 +11,78 @@ from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
+from pydantic import BaseModel, field_validator
 from ..config import settings
 from ..database import get_db
 from ..models.asset import Asset
+from ..models.comment import Comment
+from ..models.marker import Marker, MarkerColor
 from ..models.share_link import ShareLink, SharePermission
 from ..models.user import User, UserRole
 from ..schemas.share_link import ShareLinkCreate, ShareLinkResponse
 from ..utils.dependencies import get_current_user, require_editor, get_accessible_project
+
+
+# ── Misafir istek şemaları ────────────────────────────────────────────────────
+
+class GuestCommentCreate(BaseModel):
+    guest_name: str = "Misafir"
+    content: str
+    timestamp: Optional[float] = None
+
+    @field_validator("guest_name")
+    @classmethod
+    def name_ok(cls, v: str) -> str:
+        return v.strip()[:100] or "Misafir"
+
+    @field_validator("content")
+    @classmethod
+    def content_ok(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Boş yorum gönderilemez")
+        return v[:2000]
+
+    @field_validator("timestamp")
+    @classmethod
+    def ts_ok(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None and v < 0:
+            raise ValueError("Negatif zaman damgası")
+        return v
+
+
+class GuestMarkerCreate(BaseModel):
+    guest_name: str = "Misafir"
+    label: str
+    note: Optional[str] = None
+    color: str = "red"
+    timestamp: Optional[float] = None
+
+    @field_validator("guest_name")
+    @classmethod
+    def name_ok(cls, v: str) -> str:
+        return v.strip()[:100] or "Misafir"
+
+    @field_validator("label")
+    @classmethod
+    def label_ok(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Etiket boş olamaz")
+        return v[:255]
+
+    @field_validator("timestamp")
+    @classmethod
+    def ts_ok(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None and v < 0:
+            raise ValueError("Negatif zaman damgası")
+        return v
+
+
+# ── Yardımcı: sistem misafir kullanıcısı ──────────────────────────────────────
+
+def _get_guest_user(db: Session) -> User:
+    return db.query(User).filter(User.email == "_guest@shadow.internal").first()
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/share", tags=["share"])
@@ -330,4 +395,159 @@ def get_link_activity(
         "download_count": link.download_count,
         "expires_at": link.expires_at,
         "activity_log": link.activity_log or [],
+    }
+
+
+# ── Misafir yorum & marker endpointleri ───────────────────────────────────────
+# Giriş gerektirmez — token ile erişim, izin kontrolü yapılır.
+
+@router.get("/guest/{token}/comments")
+@limiter.limit("60/minute")
+def guest_list_comments(
+    request: Request,
+    token: str,
+    password: Optional[str] = Query(None, max_length=128),
+    db: Session = Depends(get_db),
+):
+    """Asset'e ait tüm yorumları listele (misafir)."""
+    link, asset = _resolve_and_validate_link(token, db, password)
+    comments = (
+        db.query(Comment)
+        .filter(Comment.asset_id == asset.id, Comment.parent_id == None)
+        .order_by(Comment.created_at.asc())
+        .limit(200)
+        .all()
+    )
+    return [
+        {
+            "id":         c.id,
+            "content":    c.content,
+            "timestamp":  c.timestamp,
+            "guest_name": c.guest_name or (c.author.full_name if c.author else "Kullanıcı"),
+            "is_resolved": c.is_resolved,
+            "created_at": c.created_at.isoformat(),
+        }
+        for c in comments
+    ]
+
+
+@router.post("/guest/{token}/comments", status_code=201)
+@limiter.limit("20/minute")
+def guest_add_comment(
+    request: Request,
+    token: str,
+    data: GuestCommentCreate,
+    password: Optional[str] = Query(None, max_length=128),
+    db: Session = Depends(get_db),
+):
+    """Misafir yorum ekle. İzin: comment veya edit."""
+    link, asset = _resolve_and_validate_link(token, db, password)
+
+    if link.permission not in (SharePermission.comment, SharePermission.edit):
+        raise HTTPException(status_code=403, detail="Bu link yorum eklemeye izin vermiyor")
+
+    guest = _get_guest_user(db)
+    if not guest:
+        raise HTTPException(status_code=500, detail="Misafir kullanıcı bulunamadı")
+
+    comment = Comment(
+        content=data.content,
+        timestamp=data.timestamp,
+        asset_id=asset.id,
+        author_id=guest.id,
+        guest_name=data.guest_name,
+    )
+    db.add(comment)
+    _log_activity(link, "guest_comment", request, db)
+    db.commit()
+    db.refresh(comment)
+
+    return {
+        "id":         comment.id,
+        "content":    comment.content,
+        "timestamp":  comment.timestamp,
+        "guest_name": comment.guest_name,
+        "is_resolved": comment.is_resolved,
+        "created_at": comment.created_at.isoformat(),
+    }
+
+
+@router.get("/guest/{token}/markers")
+@limiter.limit("60/minute")
+def guest_list_markers(
+    request: Request,
+    token: str,
+    password: Optional[str] = Query(None, max_length=128),
+    db: Session = Depends(get_db),
+):
+    """Asset'e ait tüm markerları listele (misafir)."""
+    link, asset = _resolve_and_validate_link(token, db, password)
+    markers = (
+        db.query(Marker)
+        .filter(Marker.asset_id == asset.id)
+        .order_by(Marker.timestamp.asc().nullsfirst(), Marker.created_at.asc())
+        .all()
+    )
+    return [
+        {
+            "id":         m.id,
+            "label":      m.label,
+            "note":       m.note,
+            "color":      m.color if isinstance(m.color, str) else m.color.value,
+            "timestamp":  m.timestamp,
+            "x_pos":      m.x_pos,
+            "y_pos":      m.y_pos,
+            "guest_name": m.guest_name or (m.created_by.full_name if m.created_by else "Kullanıcı"),
+            "created_at": m.created_at.isoformat(),
+        }
+        for m in markers
+    ]
+
+
+@router.post("/guest/{token}/markers", status_code=201)
+@limiter.limit("30/minute")
+def guest_add_marker(
+    request: Request,
+    token: str,
+    data: GuestMarkerCreate,
+    password: Optional[str] = Query(None, max_length=128),
+    db: Session = Depends(get_db),
+):
+    """Misafir marker ekle. İzin: edit."""
+    link, asset = _resolve_and_validate_link(token, db, password)
+
+    if link.permission != SharePermission.edit:
+        raise HTTPException(status_code=403, detail="Bu link marker eklemeye izin vermiyor")
+
+    guest = _get_guest_user(db)
+    if not guest:
+        raise HTTPException(status_code=500, detail="Misafir kullanıcı bulunamadı")
+
+    try:
+        color_enum = MarkerColor(data.color)
+    except ValueError:
+        color_enum = MarkerColor.red
+
+    marker = Marker(
+        label=data.label,
+        note=(data.note or "").strip() or None,
+        color=color_enum,
+        timestamp=data.timestamp,
+        asset_id=asset.id,
+        created_by_id=guest.id,
+        guest_name=data.guest_name,
+    )
+    db.add(marker)
+    _log_activity(link, "guest_marker", request, db)
+    db.commit()
+    db.refresh(marker)
+
+    return {
+        "id":         marker.id,
+        "label":      marker.label,
+        "note":       marker.note,
+        "color":      marker.color if isinstance(marker.color, str) else marker.color.value,
+        "timestamp":  marker.timestamp,
+        "guest_name": marker.guest_name,
+        "created_at": marker.created_at.isoformat(),
     }

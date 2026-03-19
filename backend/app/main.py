@@ -18,6 +18,48 @@ Base.metadata.create_all(bind=engine)
 # Upload dizinini oluştur
 Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
 
+# ── Hafif başlangıç migrasyonu ────────────────────────────────────────────────
+def _run_migrations() -> None:
+    """Mevcut tablolara yeni nullable sütunlar ekler (varsa atlar)."""
+    from sqlalchemy import text
+    stmts = [
+        "ALTER TABLE comments ADD COLUMN guest_name VARCHAR(100)",
+        "ALTER TABLE markers  ADD COLUMN guest_name VARCHAR(100)",
+    ]
+    with engine.connect() as conn:
+        for stmt in stmts:
+            try:
+                conn.execute(text(stmt))
+                conn.commit()
+            except Exception:
+                pass  # Sütun zaten var
+
+
+def _ensure_guest_user() -> None:
+    """Share link misafirleri için sistem kullanıcısı oluşturur (gerekirse)."""
+    from .database import SessionLocal
+    from .models.user import User, UserRole
+    from .services.auth import hash_password
+    db = SessionLocal()
+    try:
+        exists = db.query(User).filter(User.email == "_guest@shadow.internal").first()
+        if not exists:
+            db.add(User(
+                email="_guest@shadow.internal",
+                username="_guest",
+                full_name="Misafir",
+                hashed_password=hash_password("!"),  # Giriş yapılamaz
+                role=UserRole.viewer,
+                is_active=False,
+            ))
+            db.commit()
+    finally:
+        db.close()
+
+
+_run_migrations()
+_ensure_guest_user()
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",

@@ -66,6 +66,7 @@ class MarkerResponse(BaseModel):
     y_pos: Optional[float] = None
     asset_id: int
     created_by_id: int
+    guest_name: Optional[str] = None
     created_at: datetime
 
     class Config:

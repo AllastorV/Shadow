@@ -34,6 +34,9 @@ class Marker(Base):
     y_pos = Column(Float, nullable=True)
 
     asset_id = Column(Integer, ForeignKey("assets.id"), nullable=False, index=True)
+    # Share link üzerinden misafir katkısı için — kayıtlı kullanıcılarda NULL
+    guest_name = Column(String(100), nullable=True)
+
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

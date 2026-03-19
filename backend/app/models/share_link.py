@@ -8,6 +8,7 @@ from ..database import Base
 class SharePermission(str, enum.Enum):
     view = "view"
     comment = "comment"
+    edit = "edit"        # yorum + marker ekleyebilir (giriş gerektirmez)
     download = "download"
 
 

@@ -45,7 +45,7 @@ export default function AssetDetailPage() {
   const { user } = useAuthStore()
   const [tab, setTab] = useState<Tab>('info')
   const [newComment, setNewComment] = useState('')
-  const [sharePermission, setSharePermission] = useState<'view' | 'comment' | 'download'>('view')
+  const [sharePermission, setSharePermission] = useState<'view' | 'comment' | 'edit' | 'download'>('view')
   const [shareLabel, setShareLabel] = useState('')
   const [sharePassword, setSharePassword] = useState('')
   const [shareExpiry, setShareExpiry] = useState('')
@@ -680,6 +680,7 @@ export default function AssetDetailPage() {
                   <select className="input text-xs" value={sharePermission} onChange={(e) => setSharePermission(e.target.value as any)}>
                     <option value="view">Yalnızca görüntüle</option>
                     <option value="comment">Yorum yap</option>
+                    <option value="edit">Düzenle (marker + yorum ekleyebilir)</option>
                     <option value="download">İndir</option>
                   </select>
                 </div>
@@ -1058,9 +1059,10 @@ function ShareLinkCard({
   }
 
   const PERMISSION_CONFIG = {
-    view: { label: 'Görüntüle', color: 'bg-blue-500/20 text-blue-300' },
-    comment: { label: 'Yorum', color: 'bg-purple-500/20 text-purple-300' },
-    download: { label: 'İndir', color: 'bg-emerald-500/20 text-emerald-300' },
+    view:     { label: 'Görüntüle', color: 'bg-blue-500/20 text-blue-300' },
+    comment:  { label: 'Yorum',     color: 'bg-purple-500/20 text-purple-300' },
+    edit:     { label: 'Düzenle',   color: 'bg-indigo-500/20 text-indigo-300' },
+    download: { label: 'İndir',     color: 'bg-emerald-500/20 text-emerald-300' },
   }
   const perm = PERMISSION_CONFIG[link.permission as keyof typeof PERMISSION_CONFIG] || PERMISSION_CONFIG.view
 
