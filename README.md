@@ -1,6 +1,6 @@
 # Shadow — AI-Powered Media Asset Management
 
-> Shade.inc'den ilham alınarak geliştirilmiş, AI destekli Dijital Varlık Yönetim (DAM) platformu.
+> Medya ekipleri için AI destekli Dijital Varlık Yönetim (DAM) platformu.
 
 ## Özellikler
 
@@ -103,17 +103,17 @@ docker-compose up -d
 - `PATCH /api/v1/share/{id}/revoke` — Linki iptal et
 - `GET /api/v1/share/{id}/activity` — Aktivite logu
 
-## Shade.inc ile Karşılaştırma
+## Özellik Durumu
 
-| Özellik | Shade.inc | Shadow |
-|---------|-----------|--------|
-| AI Arama | ✅ Yüz, transkript, sahne | ✅ Claude API doğal dil |
-| Otomatik Etiketleme | ✅ Shot tipi, format | ✅ Claude Vision |
-| Review & Onay | ✅ Workflow | ✅ Approve/Reject/Review |
-| Client Delivery | ✅ Multi-link, RBAC | ✅ İzin seviyeleri, şifre, expiry |
-| Aktivite Logu | ✅ | ✅ View/download sayacı |
-| Cloud NAS | ✅ LucidLink benzeri | ❌ Lokal depolama |
-| Yüz Tespiti | ✅ | ❌ Gelecek versiyon |
+| Özellik | Durum | Notlar |
+|---------|-------|--------|
+| AI Arama | ✅ | Claude API ile doğal dil araması |
+| Otomatik Etiketleme | ✅ | Claude Vision ile sahne, nesne, renk analizi |
+| Review & Onay | ✅ | Approve / Reject / In Review akışı |
+| Client Delivery | ✅ | İzin seviyeleri, şifre koruması, expiry |
+| Aktivite Logu | ✅ | View / download sayacı |
+| Cloud NAS | ❌ | Şu an lokal depolama; gelecek versiyonda |
+| Yüz Tespiti | ❌ | Gelecek versiyonda planlanıyor |
 
 ## Mimari
 
