@@ -6,7 +6,7 @@ import {
   Share2, MessageSquare, Image, Video, Music, FileText,
   Loader2, Link2, Lock, Calendar, Eye, Copy, CheckCheck,
   Trash2, DownloadCloud, MapPin, Plus, FileCode2, Film,
-  UserPlus, KeyRound, ShieldCheck, RefreshCw,
+  UserPlus, KeyRound, ShieldCheck, RefreshCw, Clapperboard, HardDrive,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../utils/api'
@@ -62,6 +62,7 @@ export default function AssetDetailPage() {
   const [addingImageMarker, setAddingImageMarker] = useState(false)
   const [videoCurrentTime, setVideoCurrentTime] = useState(0)
   const [videoDuration, setVideoDuration] = useState(0)
+  const [useProxy, setUseProxy] = useState(false)
   const videoPlayerRef = useRef<VideoPlayerHandle>(null)
   const markerLabelRef = useRef<HTMLInputElement>(null)
 
@@ -168,6 +169,15 @@ export default function AssetDetailPage() {
     const i = TABS.indexOf(t); return TABS[(i - 1 + TABS.length) % TABS.length]
   }))
 
+  const proxyMutation = useMutation({
+    mutationFn: () => api.post(`/assets/${assetId}/proxy`),
+    onSuccess:  () => {
+      toast.success('Proxy oluşturma başlatıldı — tamamlandığında hazır olacak')
+      queryClient.invalidateQueries({ queryKey: ['asset', assetId] })
+    },
+    onError: (err: any) => toast.error(err.response?.data?.detail || 'Proxy oluşturulamadı'),
+  })
+
   const createShareMutation = useMutation({
     mutationFn: () =>
       api.post(`/share/asset/${assetId}`, {
@@ -218,8 +228,17 @@ export default function AssetDetailPage() {
 
   if (!asset) return <div className="p-6 text-slate-400">Asset not found</div>
 
-  // Kimlik doğrulamalı dosya URL'i (video/audio streaming için /files/ static mount)
-  const assetUrl = `/files/${asset.project_id}/${asset.filename}`
+  // Bağlı (linked) asset'ler için stream endpoint; yüklenenler için static mount
+  const baseAssetUrl = asset.storage_type === 'linked'
+    ? `/api/v1/mounts/stream/${asset.id}`
+    : `/files/${asset.project_id}/${asset.filename}`
+
+  // Proxy toggle
+  const proxyReady = asset.proxy_status === 'ready'
+  const assetUrl = (useProxy && proxyReady)
+    ? `/api/v1/assets/${asset.id}/proxy-file`
+    : baseAssetUrl
+
   // İndirme: kimlik doğrulamalı endpoint
   const downloadUrl = `/api/v1/assets/${assetId}/download`
 
@@ -310,6 +329,51 @@ export default function AssetDetailPage() {
               <Clock size={13} /> In Review
             </button>
           </div>
+          {/* Linked storage göstergesi */}
+          {asset.storage_type === 'linked' && (
+            <span
+              className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg shrink-0"
+              style={{ background: 'rgba(99,102,241,0.12)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.25)' }}
+              title="Orijinal dosyaya bağlı — kopyalanmadı"
+            >
+              <HardDrive size={11} /> Bağlantılı
+            </span>
+          )}
+
+          {/* Video proxy kontrolleri */}
+          {asset.asset_type === 'video' && (
+            <div className="flex items-center gap-1 shrink-0">
+              {proxyReady ? (
+                <button
+                  onClick={() => setUseProxy(v => !v)}
+                  className={clsx(
+                    'flex items-center gap-1 text-xs px-2 py-1 rounded-lg transition-colors',
+                    useProxy
+                      ? 'bg-cyan-600/30 text-cyan-400 border border-cyan-500/30'
+                      : 'btn-ghost text-slate-400',
+                  )}
+                  title={useProxy ? 'Proxy aktif — orijinale geç' : 'Proxy mevcut — proxy ile izle'}
+                >
+                  <Clapperboard size={12} />
+                  {useProxy ? 'PROXY' : 'HD'}
+                </button>
+              ) : (
+                <button
+                  onClick={() => proxyMutation.mutate()}
+                  disabled={proxyMutation.isPending || asset.proxy_status === 'pending'}
+                  className="btn-ghost text-xs px-2 py-1 text-slate-400"
+                  title="720p proxy oluştur — büyük dosyalarda daha hızlı önizleme"
+                >
+                  {asset.proxy_status === 'pending' ? (
+                    <><Loader2 size={11} className="animate-spin" /> Proxy…</>
+                  ) : (
+                    <><Clapperboard size={11} /> Proxy Oluştur</>
+                  )}
+                </button>
+              )}
+            </div>
+          )}
+
           <a href={downloadUrl} download={asset.original_name} className="btn-ghost p-2" title="İndir">
             <Download size={15} />
           </a>

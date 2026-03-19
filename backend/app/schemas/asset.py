@@ -50,6 +50,12 @@ class AssetResponse(BaseModel):
     mood_tags: Optional[List[str]] = None
 
     thumbnail_path: Optional[str] = None
+
+    # Depolama türü ve proxy
+    storage_type: Optional[str] = "uploaded"
+    proxy_status: Optional[str] = "none"
+    # linked_path ve proxy_path kasıtlı olarak dışarıya açılmıyor (sunucu yolu bilgisi)
+
     project_id: int
     uploader_id: int
     created_at: datetime

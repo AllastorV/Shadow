@@ -26,6 +26,34 @@ export interface Project {
   updated_at?: string
 }
 
+export type StorageType  = 'uploaded' | 'linked'
+export type ProxyStatus  = 'none' | 'pending' | 'ready' | 'error'
+
+export interface FolderMount {
+  id: number
+  project_id: number
+  path: string
+  label: string
+  created_at: string
+}
+
+export interface FolderEntry {
+  name: string
+  type: 'file' | 'dir'
+  path: string        // relative to mount root
+  size: number | null
+  extension: string | null
+  modified: number    // unix timestamp
+}
+
+export interface FolderBrowseResult {
+  mount_id: number
+  mount_label: string
+  root_path: string
+  current_sub: string
+  entries: FolderEntry[]
+}
+
 export interface Asset {
   id: number
   filename: string
@@ -34,6 +62,8 @@ export interface Asset {
   mime_type: string
   asset_type: AssetType
   status: AssetStatus
+  storage_type?: StorageType
+  proxy_status?: ProxyStatus
   width?: number
   height?: number
   duration?: number

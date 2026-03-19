@@ -27,3 +27,4 @@ class Project(Base):
     owner = relationship("User", back_populates="owned_projects", foreign_keys=[owner_id])
     members = relationship("User", secondary=project_members)
     assets = relationship("Asset", back_populates="project", cascade="all, delete-orphan")
+    mounts = relationship("FolderMount", back_populates="project", cascade="all, delete-orphan")

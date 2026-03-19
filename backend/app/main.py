@@ -9,7 +9,8 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from .database import Base, engine
-from .routers import auth, projects, assets, comments, share, markers, collab
+from .routers import auth, projects, assets, comments, share, markers, collab, folder_mounts
+from .models import folder_mount as _fm_model  # noqa: F401 — Base.metadata'ya kayıt için
 from .config import settings
 
 # Tablo oluştur
@@ -28,6 +29,20 @@ def _run_migrations() -> None:
         # Brute-force koruması (yeni sütunlar)
         "ALTER TABLE users ADD COLUMN failed_login_count INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE users ADD COLUMN locked_until DATETIME",
+        # Bağlı dosya (linked storage) + video proxy desteği
+        "ALTER TABLE assets ADD COLUMN storage_type VARCHAR(10) NOT NULL DEFAULT 'uploaded'",
+        "ALTER TABLE assets ADD COLUMN linked_path TEXT",
+        "ALTER TABLE assets ADD COLUMN proxy_path TEXT",
+        "ALTER TABLE assets ADD COLUMN proxy_status VARCHAR(10) NOT NULL DEFAULT 'none'",
+        # Klasör bağlama tablosu (yeni tablo — IF NOT EXISTS ile güvenli)
+        """CREATE TABLE IF NOT EXISTS folder_mounts (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id    INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            path          TEXT    NOT NULL,
+            label         TEXT    NOT NULL,
+            created_by_id INTEGER NOT NULL REFERENCES users(id),
+            created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+        )""",
     ]
     with engine.connect() as conn:
         for stmt in stmts:
@@ -173,7 +188,8 @@ app.include_router(assets.router, prefix="/api/v1")
 app.include_router(comments.router, prefix="/api/v1")
 app.include_router(share.router, prefix="/api/v1")
 app.include_router(markers.router, prefix="/api/v1")
-app.include_router(collab.router)  # WebSocket: /ws/{project_id}
+app.include_router(collab.router)          # WebSocket: /ws/{project_id}
+app.include_router(folder_mounts.router, prefix="/api/v1")
 
 
 @app.get("/api/v1/health")

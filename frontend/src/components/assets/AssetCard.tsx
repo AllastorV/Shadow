@@ -1,7 +1,7 @@
 import { memo } from 'react'
 import {
   Image, Video, Music, FileText, File, Camera,
-  CheckCircle, XCircle, Clock, Loader2, Tag, MessageSquare, Play,
+  CheckCircle, XCircle, Clock, Loader2, Tag, MessageSquare, Play, HardDrive,
 } from 'lucide-react'
 import type { Asset } from '../../types'
 import { formatFileSize } from '../../utils/format'
@@ -57,8 +57,12 @@ interface Props {
 
 const AssetCard = memo(function AssetCard({ asset, onClick, view = 'grid' }: Props) {
   const statusConf = STATUS_CONFIG[asset.status] ?? STATUS_CONFIG.ready
-  const assetUrl = `/files/${asset.project_id}/${asset.filename}`
+  // Linked asset'ler kopyalanmaz — orijinal konumdan stream edilir
+  const assetUrl = asset.storage_type === 'linked'
+    ? `/api/v1/mounts/stream/${asset.id}`
+    : `/files/${asset.project_id}/${asset.filename}`
   const accentColor = TYPE_COLORS[asset.asset_type] ?? TYPE_COLORS.other
+  const isLinked = asset.storage_type === 'linked'
 
   if (view === 'list') {
     return (
@@ -91,6 +95,15 @@ const AssetCard = memo(function AssetCard({ asset, onClick, view = 'grid' }: Pro
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
+          {isLinked && (
+            <span
+              className="flex items-center gap-1 text-xs"
+              style={{ color: '#818cf8' }}
+              title="Orijinal dosyaya bağlı"
+            >
+              <HardDrive size={11} />
+            </span>
+          )}
           {asset.comment_count > 0 && (
             <span className="flex items-center gap-1 text-xs text-slate-500">
               <MessageSquare size={12} />
@@ -182,11 +195,20 @@ const AssetCard = memo(function AssetCard({ asset, onClick, view = 'grid' }: Pro
         )}
 
         {/* Status badge — top right */}
-        <div className="absolute top-2 right-2">
+        <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
           <span className={statusConf.className}>
             {statusConf.icon}
             {statusConf.label}
           </span>
+          {isLinked && (
+            <span
+              className="badge"
+              style={{ background: 'rgba(99,102,241,0.75)', color: '#c7d2fe', backdropFilter: 'blur(4px)' }}
+              title="Orijinal dosyaya bağlı"
+            >
+              <HardDrive size={9} /> Bağlı
+            </span>
+          )}
         </div>
 
         {/* AI tags badge — bottom left */}

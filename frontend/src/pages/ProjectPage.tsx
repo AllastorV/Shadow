@@ -1,11 +1,12 @@
 import { useState, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Upload, Grid3X3, List, RefreshCw, Folder, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { Upload, Grid3X3, List, RefreshCw, Folder, ArrowUpDown, ArrowUp, ArrowDown, HardDrive } from 'lucide-react'
 import api from '../utils/api'
 import type { Asset, Project } from '../types'
 import AssetCard from '../components/assets/AssetCard'
 import UploadZone from '../components/assets/UploadZone'
+import FolderMountModal from '../components/mounts/FolderMountModal'
 import clsx from 'clsx'
 import { useDebounce } from '../utils/useDebounce'
 import { useShortcutAction } from '../utils/shortcuts'
@@ -39,6 +40,7 @@ export default function ProjectPage() {
 
   const [view,         setView]         = useState<'grid' | 'list'>('grid')
   const [showUpload,   setShowUpload]   = useState(false)
+  const [showMounts,   setShowMounts]   = useState(false)
   const [statusFilter, setStatusFilter] = useState('all')
   const [typeFilter,   setTypeFilter]   = useState('all')
   const [searchInput,  setSearchInput]  = useState('')
@@ -107,6 +109,10 @@ export default function ProjectPage() {
         <div className="flex items-center gap-2 shrink-0">
           <button onClick={() => refetch()} className="btn-ghost p-2" title="Yenile">
             <RefreshCw size={14} />
+          </button>
+          <button onClick={() => setShowMounts(true)} className="btn-ghost" title="Klasör bağla">
+            <HardDrive size={14} />
+            Klasör Bağla
           </button>
           <button onClick={() => setShowUpload(true)} className="btn-primary">
             <Upload size={14} />
@@ -240,6 +246,15 @@ export default function ProjectPage() {
           projectId={Number(projectId)}
           onSuccess={handleUploadSuccess}
           onClose={() => setShowUpload(false)}
+        />
+      )}
+
+      {/* Folder Mount Modal */}
+      {showMounts && (
+        <FolderMountModal
+          projectId={Number(projectId)}
+          onClose={() => setShowMounts(false)}
+          onImported={handleUploadSuccess}
         />
       )}
     </div>

@@ -599,6 +599,12 @@ def download_asset(
     # SECURITY: Verify project access before allowing download
     get_accessible_project(asset.project_id, current_user, db)
 
+    # Linked asset: orijinal konumdan indir
+    if asset.storage_type == "linked":
+        if not asset.linked_path or not Path(asset.linked_path).is_file():
+            raise HTTPException(status_code=404, detail="Kaynak dosya bulunamadı")
+        return FileResponse(asset.linked_path, filename=asset.original_name, media_type=asset.mime_type)
+
     if not os.path.exists(asset.file_path):
         raise HTTPException(status_code=404, detail="File not found on disk")
 
@@ -635,5 +641,153 @@ def delete_asset(
     if str(file_path).startswith(str(upload_dir)) and file_path.exists():
         file_path.unlink(missing_ok=True)
 
+    # Linked asset'lerde orijinal dosyaya dokunulmuyor (sadece kayıt siliniyor)
     db.delete(asset)
+    db.commit()
+
+
+# ── Video Proxy ───────────────────────────────────────────────────────────────
+
+import subprocess as _subprocess
+import shutil as _shutil
+
+_FFMPEG = _shutil.which("ffmpeg")   # None if not installed
+
+
+def _generate_proxy(asset_id: int, source_path: str, proxy_path: str) -> None:
+    """Arka plan görevi: ffmpeg ile 720p H.264 proxy oluşturur."""
+    db = SessionLocal()
+    try:
+        asset = db.query(Asset).filter(Asset.id == asset_id).first()
+        if not asset:
+            return
+
+        asset.proxy_status = "pending"
+        db.commit()
+
+        result = _subprocess.run(
+            [
+                "ffmpeg", "-y", "-i", source_path,
+                "-vf", "scale=-2:720",
+                "-c:v", "libx264", "-crf", "23", "-preset", "fast",
+                "-c:a", "aac", "-b:a", "128k",
+                "-movflags", "+faststart",
+                proxy_path,
+            ],
+            capture_output=True,
+            timeout=3600,   # max 1 saat
+        )
+
+        asset = db.query(Asset).filter(Asset.id == asset_id).first()
+        if not asset:
+            return
+
+        if result.returncode == 0 and Path(proxy_path).exists():
+            asset.proxy_path   = proxy_path
+            asset.proxy_status = "ready"
+        else:
+            asset.proxy_status = "error"
+            logger.error(f"Proxy oluşturma başarısız asset={asset_id}: {result.stderr.decode(errors='ignore')[:500]}")
+        db.commit()
+    except Exception as exc:
+        logger.error(f"Proxy görev hatası asset={asset_id}: {exc}")
+        db = SessionLocal()
+        try:
+            asset = db.query(Asset).filter(Asset.id == asset_id).first()
+            if asset:
+                asset.proxy_status = "error"
+                db.commit()
+        finally:
+            db.close()
+    finally:
+        db.close()
+
+
+@router.post("/{asset_id}/proxy")
+@limiter.limit("5/minute")
+def request_proxy(
+    request: Request,
+    asset_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Video için proxy oluşturma isteği gönderir (arka planda ffmpeg çalışır)."""
+    if not _FFMPEG:
+        raise HTTPException(503, "ffmpeg kurulu değil — proxy oluşturulamaz")
+
+    asset = db.query(Asset).filter(Asset.id == asset_id).first()
+    if not asset:
+        raise HTTPException(404, "Asset bulunamadı")
+    get_accessible_project(asset.project_id, current_user, db)
+
+    if asset.asset_type not in (AssetType.video,):
+        raise HTTPException(400, "Proxy yalnızca video asset'ler için oluşturulabilir")
+
+    if asset.proxy_status == "pending":
+        return {"proxy_status": "pending", "message": "Proxy zaten oluşturuluyor"}
+    if asset.proxy_status == "ready" and asset.proxy_path and Path(asset.proxy_path).exists():
+        return {"proxy_status": "ready", "message": "Proxy zaten mevcut"}
+
+    # Proxy dosyası için hedef yol
+    proxy_dir = Path(settings.UPLOAD_DIR) / "proxies"
+    proxy_dir.mkdir(parents=True, exist_ok=True)
+    proxy_filename = f"{asset_id}_proxy.mp4"
+    proxy_path = str(proxy_dir / proxy_filename)
+
+    # Kaynak dosya yolu (linked veya uploaded)
+    source_path = asset.linked_path if asset.storage_type == "linked" else asset.file_path
+    if not source_path or not Path(source_path).is_file():
+        raise HTTPException(404, "Kaynak video dosyası bulunamadı")
+
+    asset.proxy_status = "pending"
+    db.commit()
+
+    background_tasks.add_task(_generate_proxy, asset_id, source_path, proxy_path)
+    return {"proxy_status": "pending", "message": "Proxy oluşturma başlatıldı"}
+
+
+@router.get("/{asset_id}/proxy-file")
+@limiter.limit("60/minute")
+def get_proxy_file(
+    request: Request,
+    asset_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Hazır proxy dosyasını sunar."""
+    asset = db.query(Asset).filter(Asset.id == asset_id).first()
+    if not asset:
+        raise HTTPException(404, "Asset bulunamadı")
+    get_accessible_project(asset.project_id, current_user, db)
+
+    if asset.proxy_status != "ready" or not asset.proxy_path:
+        raise HTTPException(404, "Proxy henüz hazır değil")
+
+    proxy_path = Path(asset.proxy_path)
+    if not proxy_path.is_file():
+        asset.proxy_status = "none"
+        asset.proxy_path = None
+        db.commit()
+        raise HTTPException(404, "Proxy dosyası bulunamadı")
+
+    return FileResponse(str(proxy_path), media_type="video/mp4")
+
+
+@router.delete("/{asset_id}/proxy", status_code=204)
+def delete_proxy(
+    asset_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_editor),
+):
+    """Proxy dosyasını siler ve durumu sıfırlar."""
+    asset = db.query(Asset).filter(Asset.id == asset_id).first()
+    if not asset:
+        raise HTTPException(404, "Asset bulunamadı")
+    get_accessible_project(asset.project_id, current_user, db)
+
+    if asset.proxy_path:
+        Path(asset.proxy_path).unlink(missing_ok=True)
+    asset.proxy_path   = None
+    asset.proxy_status = "none"
     db.commit()

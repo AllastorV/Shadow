@@ -82,6 +82,18 @@ class Asset(Base):
     # Thumbnail
     thumbnail_path = Column(String, nullable=True)
 
+    # ── Depolama türü ────────────────────────────────────────────────────────
+    # "uploaded" → klasik yükleme (uploads/ altında)
+    # "linked"   → sunucu dosya sistemindeki orijinal dosyaya bağlantı
+    storage_type = Column(String, nullable=False, default="uploaded")
+    linked_path  = Column(String, nullable=True)   # linked storage orijinal yol
+
+    # ── Video proxy ──────────────────────────────────────────────────────────
+    # Proxy: düşük çözünürlüklü (720p) H.264 versiyonu — hızlı önizleme için
+    # proxy_status: "none" | "pending" | "ready" | "error"
+    proxy_path   = Column(String, nullable=True)
+    proxy_status = Column(String, nullable=False, default="none")
+
     # Relationships
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False, index=True)  # liste sorgusu
     uploader_id = Column(Integer, ForeignKey("users.id"), nullable=False)
