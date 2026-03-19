@@ -7,6 +7,7 @@ import api from '../utils/api'
 import type { Project } from '../types'
 import { formatRelative } from '../utils/format'
 import { useAuthStore } from '../store/auth'
+import { useShortcutAction } from '../utils/shortcuts'
 
 // Stat card accent configs
 const STAT_COLORS = [
@@ -32,6 +33,8 @@ export default function DashboardPage() {
   const [showNewProject, setShowNewProject] = useState(false)
   const [projectName, setProjectName] = useState('')
   const [projectDesc, setProjectDesc] = useState('')
+
+  useShortcutAction('new_project', () => setShowNewProject(true))
 
   const { data: projects, isLoading } = useQuery<Project[]>({
     queryKey: ['projects'],

@@ -1,11 +1,23 @@
 import { memo } from 'react'
 import {
-  Image, Video, Music, FileText, File,
+  Image, Video, Music, FileText, File, Camera,
   CheckCircle, XCircle, Clock, Loader2, Tag, MessageSquare, Play,
 } from 'lucide-react'
 import type { Asset } from '../../types'
 import { formatFileSize } from '../../utils/format'
 import clsx from 'clsx'
+
+const RAW_MIME_PREFIXES = ['image/x-raw', 'image/x-canon', 'image/x-nikon', 'image/x-sony',
+  'image/x-adobe-dng', 'image/x-olympus', 'image/x-panasonic', 'image/x-pentax', 'image/x-fuji']
+
+function isRawMime(mime: string): boolean {
+  return RAW_MIME_PREFIXES.some(p => mime.startsWith(p))
+}
+
+function isRenderableImage(asset: Asset): boolean {
+  if (asset.asset_type !== 'image') return false
+  return !isRawMime(asset.mime_type)
+}
 
 const TYPE_ICONS: Record<string, React.ReactNode> = {
   image:    <Image size={22} />,
@@ -13,6 +25,12 @@ const TYPE_ICONS: Record<string, React.ReactNode> = {
   audio:    <Music size={22} />,
   document: <FileText size={22} />,
   other:    <File size={22} />,
+}
+
+function assetIcon(asset: Asset): React.ReactNode {
+  if (asset.asset_type === 'image' && isRawMime(asset.mime_type))
+    return <Camera size={22} />
+  return TYPE_ICONS[asset.asset_type] ?? TYPE_ICONS.other
 }
 
 const TYPE_COLORS: Record<string, string> = {
@@ -56,10 +74,10 @@ const AssetCard = memo(function AssetCard({ asset, onClick, view = 'grid' }: Pro
           className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 overflow-hidden"
           style={{ backgroundColor: 'var(--c-surface-2)' }}
         >
-          {asset.asset_type === 'image' ? (
+          {isRenderableImage(asset) ? (
             <img src={assetUrl} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
           ) : (
-            <span style={{ color: accentColor }}>{TYPE_ICONS[asset.asset_type]}</span>
+            <span style={{ color: accentColor }}>{assetIcon(asset)}</span>
           )}
         </div>
 
@@ -118,7 +136,7 @@ const AssetCard = memo(function AssetCard({ asset, onClick, view = 'grid' }: Pro
         className="aspect-video relative overflow-hidden flex items-center justify-center"
         style={{ backgroundColor: 'var(--c-surface-1)' }}
       >
-        {asset.asset_type === 'image' ? (
+        {isRenderableImage(asset) ? (
           <img
             src={assetUrl}
             alt=""
@@ -137,8 +155,16 @@ const AssetCard = memo(function AssetCard({ asset, onClick, view = 'grid' }: Pro
                 color: accentColor,
               }}
             >
-              {TYPE_ICONS[asset.asset_type]}
+              {assetIcon(asset)}
             </div>
+            {isRawMime(asset.mime_type) && (
+              <span
+                className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md"
+                style={{ backgroundColor: `${accentColor}20`, color: accentColor }}
+              >
+                RAW
+              </span>
+            )}
             {asset.asset_type === 'video' && (
               <div
                 className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
@@ -214,7 +240,9 @@ const AssetCard = memo(function AssetCard({ asset, onClick, view = 'grid' }: Pro
               color: accentColor,
             }}
           >
-            {asset.asset_type}
+            {isRawMime(asset.mime_type)
+              ? asset.original_name.split('.').pop()?.toUpperCase() ?? 'RAW'
+              : asset.asset_type}
           </span>
         </div>
       </div>

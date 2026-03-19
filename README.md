@@ -12,6 +12,7 @@
 | 🧠 **AI Arama** | Doğal dil ile arama — "ormanda dondurma yiyen sahneler", "sıcak ışıklı portre" gibi sorgular |
 | 🏷️ **Otomatik Etiketleme** | Claude Vision ile sahne tipi, nesneler, renkler, ruh hali ve açıklama üretimi |
 | ✅ **Review & Onay** | Approve / Reject iş akışı, tek tıkla durum güncelleme |
+| ⌨️ **Klavye Kısayolları** | Adobe tarzı kısayollar, özelleştirilebilir, tam klavye navigasyonu |
 | 💬 **Yorum Sistemi** | Zaman damgalı yorumlar, çözümleme (resolve) desteği |
 | 📍 **Marker Sistemi** | Tüm oturum üyeleri video/görsel marker ekleyip silebilir; otomatik XMP + FCPXML sidecar yazımı |
 | 🎬 **NLE Entegrasyonu** | Premiere Pro (.xmp), DaVinci Resolve / Final Cut Pro (.fcpxml) marker export |
@@ -27,7 +28,8 @@
 | Tür | Formatlar |
 |-----|-----------|
 | **Video** | MP4, MOV, AVI, MKV, WebM (H.264 / H.265 / HEVC dahil) |
-| **Görsel** | PNG, JPG/JPEG, TIFF/TIF |
+| **Görsel** | PNG, JPG/JPEG, WebP, TIFF/TIF, AVIF |
+| **RAW** | CR2, CR3, NEF, ARW, DNG, ORF, RW2, PEF, RAF (Canon, Nikon, Sony, Adobe, Olympus, Panasonic, Pentax, Fujifilm) |
 | **Ses** | MP3, WAV, AAC, FLAC, OGG |
 | **Belge** | PDF |
 

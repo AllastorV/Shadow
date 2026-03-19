@@ -46,6 +46,16 @@ class Settings(BaseSettings):
         # Görseller
         ".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif",
         ".tif", ".tiff",           # TIFF — profesyonel fotoğrafçılık
+        # RAW kamera formatları (sadece metadata; preview için sidecar JPEG beklenir)
+        ".raw",                    # Generic RAW
+        ".cr2", ".cr3",            # Canon RAW
+        ".nef", ".nrw",            # Nikon RAW
+        ".arw", ".srf", ".sr2",   # Sony RAW
+        ".dng",                    # Adobe DNG (evrensel RAW)
+        ".orf",                    # Olympus RAW
+        ".rw2",                    # Panasonic RAW
+        ".pef",                    # Pentax RAW
+        ".raf",                    # Fujifilm RAW
         # Videolar (H.264/H.265 MP4/MOV container dahil)
         ".mp4", ".mov", ".avi", ".mkv", ".webm",
         # Ses

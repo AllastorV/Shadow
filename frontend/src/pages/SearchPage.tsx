@@ -5,6 +5,7 @@ import { useMutation } from '@tanstack/react-query'
 import api from '../utils/api'
 import type { Asset } from '../types'
 import AssetCard from '../components/assets/AssetCard'
+import { useShortcutAction } from '../utils/shortcuts'
 
 const EXAMPLE_QUERIES = [
   { text: 'Sinematik hava görüntüleri', emoji: '🎬' },
@@ -22,6 +23,8 @@ export default function SearchPage() {
   const [results, setResults] = useState<Asset[] | null>(null)
   const [searched, setSearched] = useState('')
   const [focused, setFocused] = useState(false)
+
+  useShortcutAction('focus_search', () => inputRef.current?.focus())
 
   const searchMutation = useMutation({
     mutationFn: (q: string) =>

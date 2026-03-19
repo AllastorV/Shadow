@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
 import App from './App'
 import { ThemeProvider } from './utils/theme'
+import { ShortcutProvider } from './utils/shortcuts'
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -29,8 +30,10 @@ const queryClient = new QueryClient({
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ThemeProvider>
+      <ShortcutProvider>
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
+          <a href="#main-content" className="skip-link">Ana içeriğe geç</a>
           <App />
           <Toaster
             position="bottom-right"
@@ -49,6 +52,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           />
         </BrowserRouter>
       </QueryClientProvider>
+      </ShortcutProvider>
     </ThemeProvider>
   </React.StrictMode>,
 )

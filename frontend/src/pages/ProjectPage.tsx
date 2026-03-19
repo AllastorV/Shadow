@@ -9,6 +9,7 @@ import AssetCard from '../components/assets/AssetCard'
 import UploadZone from '../components/assets/UploadZone'
 import clsx from 'clsx'
 import { useDebounce } from '../utils/useDebounce'
+import { useShortcutAction } from '../utils/shortcuts'
 
 const STATUS_FILTERS = ['all', 'pending', 'approved', 'rejected'] as const
 const TYPE_FILTERS = ['all', 'image', 'video', 'audio', 'document', 'other'] as const
@@ -71,6 +72,10 @@ export default function ProjectPage() {
   const handleSetView = useCallback((v: 'grid' | 'list') => setView(v), [])
   const handleStatusFilter = useCallback((s: string) => setStatusFilter(s), [])
   const handleTypeFilter = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => setTypeFilter(e.target.value), [])
+
+  useShortcutAction('view_grid', () => setView('grid'))
+  useShortcutAction('view_list', () => setView('list'))
+  useShortcutAction('upload',    () => setShowUpload(true))
 
   // AssetCard click handler factory — useCallback ile sabit referans
   const handleAssetClick = useCallback(

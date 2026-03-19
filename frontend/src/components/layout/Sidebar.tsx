@@ -2,12 +2,13 @@ import { memo, useEffect, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Search, FolderOpen, LogOut, Layers,
-  Cpu, Cloud, AlertCircle, Sun, Moon, ChevronRight,
+  Cpu, Cloud, AlertCircle, Sun, Moon, ChevronRight, Keyboard,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/auth'
 import { useQuery } from '@tanstack/react-query'
 import api from '../../utils/api'
 import { useTheme } from '../../utils/theme'
+import { useShortcuts } from '../../utils/shortcuts'
 import type { Project } from '../../types'
 import clsx from 'clsx'
 
@@ -35,6 +36,7 @@ export default memo(function Sidebar() {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
+  const { openPanel } = useShortcuts()
   const pageVisible = usePageVisible()
 
   const { data: projects } = useQuery<Project[]>({
@@ -87,6 +89,24 @@ export default memo(function Sidebar() {
             DAM
           </span>
         </div>
+        {/* Shortcuts panel button */}
+        <button
+          onClick={openPanel}
+          className="w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-200 shrink-0"
+          style={{ color: '#8b9ab8' }}
+          onMouseEnter={e => {
+            e.currentTarget.style.backgroundColor = 'var(--c-surface-2)'
+            e.currentTarget.style.color = 'inherit'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.backgroundColor = 'transparent'
+            e.currentTarget.style.color = '#8b9ab8'
+          }}
+          title="Klavye kısayolları (Shift+?)"
+          aria-label="Klavye kısayollarını göster"
+        >
+          <Keyboard size={14} />
+        </button>
         {/* Theme toggle */}
         <button
           onClick={toggleTheme}

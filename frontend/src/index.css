@@ -178,4 +178,33 @@
   .glow-border {
     box-shadow: 0 0 0 1px rgba(99,102,241,0.4), 0 0 16px rgba(99,102,241,0.2);
   }
+
+  /* ── Keyboard navigation — focus rings ─────────────────────────────────── */
+  /* Remove default outline globally and replace with branded ring */
+  *:focus { outline: none; }
+  *:focus-visible {
+    outline: 2px solid #6366f1;
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  /* Skip to main content — hidden until focused */
+  .skip-link {
+    position: fixed;
+    top: -100%;
+    left: 1rem;
+    z-index: 9999;
+    padding: 0.5rem 1rem;
+    background: #6366f1;
+    color: #fff;
+    font-size: 0.875rem;
+    font-weight: 600;
+    border-radius: 0 0 8px 8px;
+    transition: top 0.15s;
+  }
+  .skip-link:focus {
+    top: 0;
+    outline: 2px solid #a5b4fc;
+    outline-offset: 2px;
+  }
 }

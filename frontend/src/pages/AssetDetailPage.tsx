@@ -14,6 +14,7 @@ import type { Asset, Comment, ShareLink, Marker, MarkerColor } from '../types'
 import { formatFileSize, formatDate, formatRelative } from '../utils/format'
 import { useAuthStore } from '../store/auth'
 import clsx from 'clsx'
+import { useShortcutAction } from '../utils/shortcuts'
 
 type Tab = 'info' | 'comments' | 'share' | 'markers'
 
@@ -135,6 +136,22 @@ export default function AssetDetailPage() {
     },
   })
 
+  const TABS: Tab[] = ['info', 'comments', 'share', 'markers']
+  useShortcutAction('approve_asset', () => { if (asset) statusMutation.mutate('approved') }, [asset])
+  useShortcutAction('reject_asset',  () => { if (asset) statusMutation.mutate('rejected') }, [asset])
+  useShortcutAction('play_pause',    () => {
+    const v = videoRef.current
+    if (!v) return
+    v.paused ? v.play() : v.pause()
+  })
+  useShortcutAction('add_marker', () => setTab('markers'))
+  useShortcutAction('next_tab', () => setTab(t => {
+    const i = TABS.indexOf(t); return TABS[(i + 1) % TABS.length]
+  }))
+  useShortcutAction('prev_tab', () => setTab(t => {
+    const i = TABS.indexOf(t); return TABS[(i - 1 + TABS.length) % TABS.length]
+  }))
+
   const createShareMutation = useMutation({
     mutationFn: () =>
       api.post(`/share/asset/${assetId}`, {
@@ -230,7 +247,7 @@ export default function AssetDetailPage() {
         {/* Preview */}
         <div className="flex-1 flex flex-col bg-black/20 overflow-hidden">
           <div className="flex-1 flex items-center justify-center p-4 overflow-hidden relative">
-            {asset.asset_type === 'image' && tab === 'markers' ? (
+            {asset.asset_type === 'image' && !asset.mime_type.startsWith('image/x-') && tab === 'markers' ? (
               /* Gorsel marker modu: tıklayarak marker ekle */
               <ImageMarkerOverlay
                 src={assetUrl}
@@ -247,8 +264,27 @@ export default function AssetDetailPage() {
                   }
                 }}
               />
-            ) : asset.asset_type === 'image' ? (
+            ) : asset.asset_type === 'image' && !asset.mime_type.startsWith('image/x-') ? (
               <img src={assetUrl} alt={asset.original_name} className="max-w-full max-h-full object-contain rounded-lg" />
+            ) : asset.asset_type === 'image' && asset.mime_type.startsWith('image/x-') ? (
+              /* RAW format — tarayıcıda görüntülenemez */
+              <div className="flex flex-col items-center gap-4 text-center">
+                <div className="w-20 h-20 rounded-3xl flex items-center justify-center" style={{ background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.25)' }}>
+                  <Image size={36} className="text-brand-400" />
+                </div>
+                <div>
+                  <p className="font-semibold text-sm" style={{ color: 'inherit' }}>RAW Görsel</p>
+                  <p className="text-xs mt-1" style={{ color: '#6b7a96' }}>
+                    {asset.mime_type} — tarayıcıda önizleme desteklenmiyor
+                  </p>
+                  <p className="text-xs mt-0.5" style={{ color: '#4a5a72' }}>
+                    Dosyayı indirerek görüntüleyebilirsiniz
+                  </p>
+                </div>
+                <a href={`/api/v1/assets/${assetId}/download`} download={asset.original_name} className="btn-primary text-xs">
+                  <Download size={13} /> RAW Dosyasını İndir
+                </a>
+              </div>
             ) : asset.asset_type === 'video' ? (
               <video
                 ref={videoRef}

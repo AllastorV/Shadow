@@ -39,6 +39,17 @@ ALLOWED_MIME_TYPES: dict[str, AssetType] = {
     "image/avif": AssetType.image,
     "image/tiff": AssetType.image,     # TIFF (profesyonel fotoğrafçılık)
     "image/x-tiff": AssetType.image,   # TIFF alternatif MIME
+    # ── RAW kamera formatları ──
+    "image/x-raw": AssetType.image,
+    "image/x-adobe-dng": AssetType.image,   # DNG
+    "image/x-canon-cr2": AssetType.image,   # Canon CR2
+    "image/x-canon-cr3": AssetType.image,   # Canon CR3
+    "image/x-nikon-nef": AssetType.image,   # Nikon NEF
+    "image/x-sony-arw": AssetType.image,    # Sony ARW
+    "image/x-olympus-orf": AssetType.image, # Olympus ORF
+    "image/x-panasonic-rw2": AssetType.image, # Panasonic RW2
+    "image/x-fuji-raf": AssetType.image,    # Fujifilm RAF
+    "image/x-pentax-pef": AssetType.image,  # Pentax PEF
     # ── Videolar — H.264 ve H.265/HEVC dahil ──
     # MP4 container: H.264 (AVC), H.265 (HEVC), AV1
     "video/mp4": AssetType.video,
@@ -80,6 +91,24 @@ MAGIC_BYTES: list[tuple[bytes, str]] = [
     (b"II\x2a\x00", "image/tiff"),
     (b"MM\x00\x2a", "image/tiff"),
 ]
+
+
+# RAW extensions that browsers may report as application/octet-stream
+RAW_EXTENSIONS: dict[str, str] = {
+    ".raw": "image/x-raw",
+    ".cr2": "image/x-canon-cr2",
+    ".cr3": "image/x-canon-cr3",
+    ".nef": "image/x-nikon-nef",
+    ".nrw": "image/x-nikon-nef",
+    ".arw": "image/x-sony-arw",
+    ".srf": "image/x-sony-arw",
+    ".sr2": "image/x-sony-arw",
+    ".dng": "image/x-adobe-dng",
+    ".orf": "image/x-olympus-orf",
+    ".rw2": "image/x-panasonic-rw2",
+    ".pef": "image/x-pentax-pef",
+    ".raf": "image/x-fuji-raf",
+}
 
 
 def _sanitize_extension(filename: str) -> str:
@@ -219,6 +248,11 @@ async def upload_assets(
     for file in files:
         # SECURITY: Validate MIME type against whitelist
         declared_mime = file.content_type or mimetypes.guess_type(file.filename or "")[0] or ""
+        # RAW files: browsers may report as application/octet-stream — remap by extension
+        if declared_mime in ("application/octet-stream", ""):
+            ext_lower = Path(file.filename or "").suffix.lower()
+            if ext_lower in RAW_EXTENSIONS:
+                declared_mime = RAW_EXTENSIONS[ext_lower]
         if declared_mime not in ALLOWED_MIME_TYPES:
             raise HTTPException(
                 status_code=415,
