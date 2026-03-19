@@ -11,6 +11,9 @@ build/
 venv/
 env/
 *.db
+*.db-shm
+*.db-wal
+*.db-journal
 backend/uploads/
 
 # Environment
