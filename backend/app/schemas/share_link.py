@@ -25,10 +25,10 @@ class ShareLinkCreate(BaseModel):
     @classmethod
     def password_length(cls, v: Optional[str]) -> Optional[str]:
         if v is not None:
-            if len(v) < 4:
-                raise ValueError("Share link password must be at least 4 characters")
+            if len(v) < 8:
+                raise ValueError("Paylaşım linki parolası en az 8 karakter olmalıdır")
             if len(v) > 64:
-                raise ValueError("Share link password too long")
+                raise ValueError("Paylaşım linki parolası çok uzun")
         return v
 
     @field_validator("recipient_name")

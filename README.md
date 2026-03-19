@@ -1,7 +1,17 @@
-# Shadow — AI-Powered Media Asset Management
+<div align="center">
 
-> Medya ekipleri için AI destekli Dijital Varlık Yönetim (DAM) platformu.
-> FastAPI + React/TypeScript ile inşa edilmiş, karanlık/aydınlık mod destekli modern arayüz.
+# Shadow DAM
+
+**AI destekli Dijital Varlık Yönetim platformu**
+
+Medya ekipleri için gerçek zamanlı işbirliği, akıllı arama ve NLE entegrasyonu.
+
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=flat-square&logo=fastapi)](https://fastapi.tiangolo.com)
+[![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react)](https://react.dev)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript)](https://typescriptlang.org)
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python)](https://python.org)
+
+</div>
 
 ---
 
@@ -9,17 +19,21 @@
 
 | Özellik | Açıklama |
 |---------|----------|
-| 🧠 **AI Arama** | Doğal dil ile arama — "ormanda dondurma yiyen sahneler", "sıcak ışıklı portre" gibi sorgular |
-| 🏷️ **Otomatik Etiketleme** | Claude Vision ile sahne tipi, nesneler, renkler, ruh hali ve açıklama üretimi |
-| ✅ **Review & Onay** | Approve / Reject iş akışı, tek tıkla durum güncelleme |
-| ⌨️ **Klavye Kısayolları** | Adobe tarzı kısayollar, özelleştirilebilir, tam klavye navigasyonu |
-| 💬 **Yorum Sistemi** | Zaman damgalı yorumlar, çözümleme (resolve) desteği |
-| 📍 **Marker Sistemi** | Tüm oturum üyeleri video/görsel marker ekleyip silebilir; otomatik XMP + FCPXML sidecar yazımı |
-| 🎬 **NLE Entegrasyonu** | Premiere Pro (.xmp), DaVinci Resolve / Final Cut Pro (.fcpxml) marker export |
-| 🔗 **Paylaşım Linkleri** | İzin tabanlı (View / Comment / Download), şifre koruması, son kullanma tarihi, aktivite logu |
-| 📁 **Proje Yönetimi** | Çoklu proje, grid/liste görünümü, tür ve durum filtreleri, debounced arama |
-| 🌓 **Karanlık/Aydınlık Mod** | Sistem tercihine bağımsız toggle, localStorage kalıcı tercih |
-| 🔐 **RBAC** | Admin / Editor / Viewer rolleri, JWT kimlik doğrulama |
+| 🧠 **AI Arama** | Doğal dil ile arama — "ormanda dondurma yiyen sahneler", "sıcak ışıklı portre" |
+| 🏷️ **Otomatik Etiketleme** | Claude Vision: sahne tipi, nesneler, renkler, ruh hali, açıklama |
+| ✅ **Review & Onay** | Approve / Reject / In Review iş akışı |
+| ⌨️ **Klavye Kısayolları** | Adobe tarzı kısayollar (J/K/L, frame step), tam özelleştirme |
+| 💬 **Yorum Sistemi** | Zaman damgalı yorumlar, resolve desteği, gerçek zamanlı güncelleme |
+| 📍 **Marker Sistemi** | Video + görsel marker, 7 renk, XMP + FCPXML otomatik sidecar |
+| 🎬 **NLE Entegrasyonu** | Premiere Pro (.xmp) · DaVinci Resolve / Final Cut Pro (.fcpxml) |
+| 🤝 **Gerçek Zamanlı İşbirliği** | WebSocket ile oda başına 10 kullanıcı, canlı avatar gösterimi |
+| 🔗 **Kişisel Davet Sistemi** | Her davetliye özel link, yetki seviyesi, isteğe bağlı şifre |
+| 👤 **Misafir Erişimi** | Kayıt gerektirmez — link ile yorum ve marker ekle |
+| 🎥 **Özel Video Oynatıcı** | Premiere tarzı transport, marker timeline, hız kontrolü |
+| 📁 **Proje Yönetimi** | Grid/liste, tür/durum filtresi, AI destekli arama |
+| 🌓 **Karanlık / Aydınlık Mod** | Sistem tercihine bağımsız toggle |
+| 🔐 **RBAC + Brute-force Koruması** | Admin / Editor / Viewer, hesap kilitleme |
+| 🔒 **HTTPS Desteği** | Caddy ile otomatik TLS, HSTS, Let's Encrypt |
 
 ---
 
@@ -27,10 +41,10 @@
 
 | Tür | Formatlar |
 |-----|-----------|
-| **Video** | MP4, MOV, AVI, MKV, WebM (H.264 / H.265 / HEVC dahil) |
-| **Görsel** | PNG, JPG/JPEG, WebP, TIFF/TIF, AVIF |
-| **RAW** | CR2, CR3, NEF, ARW, DNG, ORF, RW2, PEF, RAF (Canon, Nikon, Sony, Adobe, Olympus, Panasonic, Pentax, Fujifilm) |
-| **Ses** | MP3, WAV, AAC, FLAC, OGG |
+| **Video** | MP4, MOV, AVI, MKV, WebM |
+| **Görsel** | PNG, JPG/JPEG, WebP, TIFF/TIF, AVIF, GIF |
+| **RAW Kamera** | CR2, CR3 (Canon) · NEF, NRW (Nikon) · ARW, SRF (Sony) · DNG (Adobe) · ORF (Olympus) · RW2 (Panasonic) · PEF (Pentax) · RAF (Fujifilm) |
+| **Ses** | MP3, WAV, AAC, FLAC, OGG, M4A |
 | **Belge** | PDF |
 
 ---
@@ -38,71 +52,124 @@
 ## Teknoloji Yığını
 
 ### Backend
-- **Python 3.12** + **FastAPI**
-- **SQLAlchemy ORM** + SQLite (production için PostgreSQL önerilir)
-- **Anthropic Claude API** — Vision analizi + doğal dil arama
-- **Pillow** — PNG/TIFF içi XMP gömme
-- **JWT** (HS256) kimlik doğrulama
-- **slowapi** hız sınırlama, **GZipMiddleware** sıkıştırma
-- **SQLite WAL modu** + PRAGMA performans optimizasyonları
+- **Python 3.12** + **FastAPI** — async, tip güvenli API
+- **SQLAlchemy ORM** + SQLite (production → PostgreSQL)
+- **Anthropic Claude API** — Vision analizi, doğal dil arama
+- **JWT** (HS256) + **bcrypt** kimlik doğrulama
+- **slowapi** hız sınırlama · **GZipMiddleware** sıkıştırma
+- **WebSocket** gerçek zamanlı işbirliği (ConnectionManager)
 
 ### Frontend
 - **React 18** + **TypeScript**
-- **Tailwind CSS** — CSS custom properties ile otomatik dark/light theming
-- **Plus Jakarta Sans** (UI) + **JetBrains Mono** (teknik veriler)
-- **TanStack Query** — 5 dk staleTime, akıllı polling, Visibility API entegrasyonu
+- **Tailwind CSS** — CSS custom properties ile dark/light theming
+- **TanStack Query** — akıllı cache, staleTime, invalidation
 - **Zustand** — auth state yönetimi
-- **Vite** — manuel vendor chunk code splitting, ES2020 target
-- **React.memo / useMemo / useCallback** — render optimizasyonları
+- **Vite** — code splitting, ES2020 target
+- **Plus Jakarta Sans** + **JetBrains Mono**
+
+### Prodüksiyon
+- **Caddy** — otomatik HTTPS / Let's Encrypt
+- **Docker Compose** — geliştirme + prodüksiyon profilleri
+- **nginx** — SPA sunumu, WebSocket proxy
 
 ---
 
 ## Kurulum
 
-### 1. Bağımlılıkları Yükle
+### Geliştirme Ortamı
+
+**1. Bağımlılıklar**
 
 ```bash
 # Backend
-cd backend
-pip install -r requirements.txt
+cd backend && pip install -r requirements.txt
 
 # Frontend
-cd frontend
-npm install
+cd frontend && npm install
 ```
 
-### 2. Ortam Değişkenleri
+**2. Ortam Değişkenleri**
 
 ```bash
 # backend/.env
-ANTHROPIC_API_KEY=sk-ant-...     # Claude API anahtarı (AI özellikleri için)
-SECRET_KEY=guclu-rastgele-bir-anahtar
+SECRET_KEY=cok-guclu-rastgele-bir-anahtar-min-32-karakter
+ANTHROPIC_API_KEY=sk-ant-...
 DATABASE_URL=sqlite:///./shadow.db
 UPLOAD_DIR=./uploads
 ```
 
-### 3. Çalıştır
+**3. Çalıştır**
 
 ```bash
-# Backend (terminal 1)
-cd backend
-uvicorn app.main:app --reload --port 8000
+# Terminal 1 — Backend
+cd backend && uvicorn app.main:app --reload --port 8000
 
-# Frontend (terminal 2)
-cd frontend
-npm run dev
+# Terminal 2 — Frontend
+cd frontend && npm run dev
 ```
 
-- Uygulama: http://localhost:5173
-- API Docs: http://localhost:8000/docs
+| Servis | URL |
+|--------|-----|
+| Uygulama | http://localhost:5173 |
+| API Docs | http://localhost:8000/docs |
 
-### Docker ile Çalıştırma
+---
+
+### Docker ile Geliştirme
 
 ```bash
-cp backend/.env.example backend/.env
-# .env dosyasında ANTHROPIC_API_KEY'i ayarlayın
-docker-compose up -d
+docker compose up -d
 ```
+
+---
+
+### Prodüksiyon (HTTPS)
+
+Caddy otomatik olarak Let's Encrypt üzerinden TLS sertifikası alır ve yeniler:
+
+```bash
+DOMAIN=shadow.example.com \
+SECRET_KEY=$(openssl rand -hex 32) \
+ANTHROPIC_API_KEY=sk-ant-... \
+docker compose -f docker-compose.prod.yml up -d
+```
+
+| Port | Servis |
+|------|--------|
+| 80 | HTTP → HTTPS yönlendirme |
+| 443 | HTTPS (Caddy + Let's Encrypt) |
+
+---
+
+## Güvenlik
+
+### Mevcut Korumalar
+
+| Alan | Önlem |
+|------|-------|
+| **Kimlik Doğrulama** | JWT (HS256) · bcrypt şifre hash · rol tabanlı erişim (RBAC) |
+| **Brute-force** | 5 başarısız giriş → 15 dakika hesap kilidi · hız sınırlama (slowapi) |
+| **Şifre Politikası** | Min. 10 karakter · büyük/küçük harf · rakam · özel karakter zorunlu |
+| **Dosya Yükleme** | Magic bytes doğrulaması · uzantı beyaz listesi · yol geçişi koruması · 500 MB limit |
+| **HTTP Başlıkları** | CSP · X-Frame-Options · X-Content-Type-Options · Referrer-Policy · Permissions-Policy |
+| **HTTPS** | HSTS (1 yıl, preload) · Caddy otomatik TLS · X-Forwarded-Proto koşullu |
+| **Paylaşım Linkleri** | 256-bit token · bcrypt şifre hash · 22-karakter otomatik şifre (~96-bit) |
+| **WebSocket** | JWT doğrulama · proje erişim kontrolü · oda başına 10 kullanıcı limiti |
+| **Veri Doğrulama** | Pydantic v2 şemalar · field validator'lar · SQL enjeksiyonu yok (ORM) |
+| **Gizlilik** | Sunucu parmak izi gizleme · generic hata mesajları · IP hash aktivite logu |
+| **CORS** | Explicit origin listesi · wildcard (*) başlangıç uyarısı |
+| **Denetim** | Admin rol değişiklikleri loglama · `shadow.audit` logger |
+| **RFC 9116** | `/.well-known/security.txt` güvenlik açığı bildirim politikası |
+
+### Önerilen Prodüksiyon Adımları
+
+> Aşağıdaki önlemler mimari değişiklik gerektirir; uygulamaya alınması önerilir.
+
+- **Refresh token pattern** — Erişim token'ı süresini 1 saate indirin, yenileme için refresh endpoint ekleyin
+- **httpOnly cookie** — JWT'yi sessionStorage yerine httpOnly Secure cookie'de saklayın (XSS koruması)
+- **PostgreSQL** — SQLite yerine şifreli bağlantı destekli PostgreSQL kullanın
+- **Bağımlılık tarama** — CI pipeline'a `pip-audit` + `npm audit` ekleyin
+- **WebSocket token** — `?token=` query param yerine handshake sırasında header tabanlı doğrulamaya geçin
 
 ---
 
@@ -111,9 +178,10 @@ docker-compose up -d
 ### Auth
 | Method | Endpoint | Açıklama |
 |--------|----------|----------|
-| `POST` | `/api/v1/auth/register` | Kayıt |
-| `POST` | `/api/v1/auth/login` | Giriş |
-| `GET`  | `/api/v1/auth/me` | Profil |
+| `POST` | `/api/v1/auth/register` | Kayıt (şifre politikası uygulanır) |
+| `POST` | `/api/v1/auth/login` | Giriş · brute-force korumalı · `Cache-Control: no-store` |
+| `GET`  | `/api/v1/auth/me` | Mevcut kullanıcı profili |
+| `PATCH`| `/api/v1/auth/users/{id}/role` | Rol güncelle (yalnızca admin, denetim kaydı) |
 
 ### Projects
 | Method | Endpoint | Açıklama |
@@ -125,56 +193,55 @@ docker-compose up -d
 ### Assets
 | Method | Endpoint | Açıklama |
 |--------|----------|----------|
-| `POST` | `/api/v1/assets/upload/{project_id}` | Dosya yükle |
+| `POST` | `/api/v1/assets/upload/{project_id}` | Dosya yükle (magic bytes doğrulaması) |
 | `GET`  | `/api/v1/assets/project/{project_id}` | Proje varlıkları |
-| `GET`  | `/api/v1/assets/search?q=...` | AI doğal dil araması |
+| `GET`  | `/api/v1/assets/search?q=` | AI doğal dil araması |
 | `POST` | `/api/v1/assets/{id}/ai-tag` | AI etiketleme tetikle |
-| `PATCH`| `/api/v1/assets/{id}/status` | Durum güncelle |
+| `PATCH`| `/api/v1/assets/{id}/status` | Durum güncelle (WS yayını) |
+| `GET`  | `/api/v1/assets/{id}/download` | Kimlik doğrulamalı indirme |
 
 ### Markers
 | Method | Endpoint | Açıklama |
 |--------|----------|----------|
 | `GET`  | `/api/v1/markers/asset/{asset_id}` | Marker listesi |
-| `POST` | `/api/v1/markers/asset/{asset_id}` | Marker ekle |
-| `PATCH`| `/api/v1/markers/{marker_id}` | Marker güncelle |
-| `DELETE`| `/api/v1/markers/{marker_id}` | Marker sil |
+| `POST` | `/api/v1/markers/asset/{asset_id}` | Marker ekle (WS yayını) |
+| `PATCH`| `/api/v1/markers/{id}` | Güncelle |
+| `DELETE`| `/api/v1/markers/{id}` | Sil — yalnızca oluşturan / proje sahibi / admin |
 | `GET`  | `/api/v1/markers/asset/{asset_id}/export/xmp` | Premiere Pro export |
 | `GET`  | `/api/v1/markers/asset/{asset_id}/export/fcpxml` | DaVinci / FCP export |
 
 ### Share
 | Method | Endpoint | Açıklama |
 |--------|----------|----------|
-| `POST` | `/api/v1/share/asset/{id}` | Paylaşım linki oluştur |
-| `GET`  | `/api/v1/share/view/{token}` | Paylaşılan varlığı görüntüle (public) |
-| `GET`  | `/api/v1/share/file/{token}` | Dosya sun (token bazlı, yol açığı korumalı) |
+| `POST` | `/api/v1/share/asset/{id}` | Kişisel davet linki oluştur |
+| `GET`  | `/api/v1/share/asset/{id}` | Asset'in davet listesi |
+| `GET`  | `/api/v1/share/view/{token}` | Paylaşılan asset meta verisi (public) |
+| `GET`  | `/api/v1/share/file/{token}` | Dosya sun (token + path traversal korumalı) |
 | `PATCH`| `/api/v1/share/{id}/revoke` | Linki iptal et |
-| `GET`  | `/api/v1/share/{id}/activity` | Aktivite logu |
+| `POST` | `/api/v1/share/guest/{token}/comments` | Misafir yorum ekle |
+| `GET`  | `/api/v1/share/guest/{token}/comments` | Misafir yorum listesi |
+| `POST` | `/api/v1/share/guest/{token}/markers` | Misafir marker ekle (edit izni) |
+| `GET`  | `/api/v1/share/guest/{token}/markers` | Misafir marker listesi |
+
+### WebSocket
+| Endpoint | Açıklama |
+|----------|----------|
+| `WS /ws/{project_id}?token=<jwt>` | Gerçek zamanlı işbirliği odası |
 
 ---
 
 ## Marker Sistemi
 
-Marker'lar tüm proje üyeleri tarafından eklenip silinebilir. Her mutasyonda dosyalar otomatik güncellenir:
-
 | Format | Dosya | Uyumluluk |
 |--------|-------|-----------|
 | **XMP Sidecar** | `dosyaadi.xmp` | Adobe Premiere Pro, After Effects, Bridge |
 | **FCPXML** | `dosyaadi.fcpxml` | DaVinci Resolve, Final Cut Pro |
-| **Gömülü XMP** | PNG / TIFF içine | Pillow ile kayıpsız gömme (JPEG sidecar alır) |
+| **Gömülü XMP** | PNG / TIFF içine | Pillow ile kayıpsız gömme |
 
-Video marker'ları: timestamp (saniye) + süre + renk + etiket + not
-Görsel marker'ları: yüzde bazlı koordinatlar (0–100%) + renk + etiket + not
+- **Video marker:** timestamp (saniye) + süre + renk + etiket + not
+- **Görsel marker:** yüzde bazlı koordinatlar (0–100%) + renk + etiket + not
 
----
-
-## Güvenlik
-
-- **Path traversal koruması** — Dosya sunucusunda yol doğrulama
-- **Magic bytes doğrulaması** — MIME tip sahteciliğine karşı
-- **Hız sınırlama** — slowapi ile endpoint bazlı limit
-- **CSP başlıkları** — `frame-ancestors` ile clickjacking koruması
-- **Bcrypt** — Paylaşım linki şifreleri için
-- **256-bit entropi** — Paylaşım token'ları
+Marker silme yalnızca **oluşturana**, **proje sahibine** veya **admin**'e açıktır.
 
 ---
 
@@ -184,42 +251,44 @@ Görsel marker'ları: yüzde bazlı koordinatlar (0–100%) + renk + etiket + no
 Shadow/
 ├── backend/
 │   └── app/
-│       ├── models/          # SQLAlchemy ORM (Asset, Project, User, Marker, ShareLink…)
-│       ├── schemas/         # Pydantic şemaları + validasyonlar
-│       ├── routers/         # FastAPI router'ları (assets, markers, share, auth…)
-│       ├── services/        # AI servisi, marker_service (XMP/FCPXML)
-│       ├── utils/           # Bağımlılıklar, EXISTS bazlı N+1 koruması
-│       ├── config.py        # Ayarlar, izin verilen uzantılar
-│       ├── database.py      # WAL modu, PostgreSQL connection pool
-│       └── main.py          # GZipMiddleware, güvenlik başlıkları
-└── frontend/
-    └── src/
-        ├── pages/           # DashboardPage, ProjectPage, AssetDetailPage, SearchPage…
-        ├── components/
-        │   ├── layout/      # Sidebar (dark/light toggle), AppLayout
-        │   └── assets/      # AssetCard, UploadZone
-        ├── utils/
-        │   ├── theme.tsx    # ThemeProvider + useTheme hook
-        │   ├── useDebounce.ts
-        │   └── api.ts
-        ├── store/           # Zustand auth store
-        └── types/           # TypeScript arayüzleri (Asset, Marker, ShareLink…)
+│       ├── models/        # SQLAlchemy ORM — User, Asset, Project, Marker, ShareLink
+│       ├── schemas/       # Pydantic v2 — doğrulama + serileştirme
+│       ├── routers/       # FastAPI router'ları — auth, assets, markers, share, collab
+│       ├── services/      # ai_service (Claude), marker_service (XMP/FCPXML), auth
+│       ├── utils/         # dependencies, EXISTS bazlı N+1 koruması
+│       ├── ws_manager.py  # WebSocket ConnectionManager (oda başına maks 10)
+│       ├── config.py      # Ayarlar, CORS origin doğrulaması
+│       ├── database.py    # WAL modu, PRAGMA optimizasyonları
+│       └── main.py        # Middleware yığını, migration, startup
+├── frontend/
+│   └── src/
+│       ├── pages/         # Dashboard, Project, AssetDetail, ShareView, Search
+│       ├── components/    # VideoPlayer, layout, assets
+│       ├── hooks/         # useCollaboration (WebSocket), useShortcutAction
+│       ├── utils/         # api.ts, shortcuts, format
+│       ├── store/         # Zustand auth store
+│       └── types/         # TypeScript arayüzleri
+├── Caddyfile              # HTTPS prodüksiyon reverse proxy
+├── docker-compose.yml     # Geliştirme
+└── docker-compose.prod.yml # Prodüksiyon (Caddy + HTTPS)
 ```
 
 ---
 
 ## Özellik Durumu
 
-| Özellik | Durum | Notlar |
-|---------|-------|--------|
-| AI Arama | ✅ | Claude API doğal dil araması |
-| Otomatik Etiketleme | ✅ | Claude Vision — sahne, nesne, renk, ruh hali |
-| Review & Onay | ✅ | Approve / Reject akışı |
-| Paylaşım Linkleri | ✅ | Şifre, expiry, izin seviyeleri |
-| Marker Sistemi | ✅ | XMP + FCPXML otomatik sidecar, 7 renk |
-| TIFF Desteği | ✅ | Hem upload hem XMP gömme |
-| Karanlık/Aydınlık Mod | ✅ | CSS variables, localStorage kalıcı |
-| N+1 Koruması | ✅ | SQL EXISTS sorgusu |
-| Görünürlük Bazlı Polling | ✅ | Visibility API, 5 dk interval |
-| Cloud NAS | ❌ | Şu an lokal depolama; gelecek versiyonda |
-| Yüz Tespiti | ❌ | Gelecek versiyonda planlanıyor |
+| Özellik | Durum |
+|---------|-------|
+| AI Arama + Etiketleme | ✅ |
+| Review & Onay İş Akışı | ✅ |
+| Marker Sistemi (video + görsel) | ✅ |
+| NLE Export (XMP + FCPXML) | ✅ |
+| Özel Video Oynatıcı (J/K/L) | ✅ |
+| Gerçek Zamanlı İşbirliği (WS) | ✅ |
+| Kişisel Davet + Misafir Erişimi | ✅ |
+| HTTPS / Caddy Otomatik TLS | ✅ |
+| Brute-force / Hesap Kilitleme | ✅ |
+| Karanlık / Aydınlık Mod | ✅ |
+| Cloud NAS / S3 Depolama | ❌ Planlanıyor |
+| Yüz / Nesne Tespiti | ❌ Planlanıyor |
+| Refresh Token | ❌ Planlanıyor |

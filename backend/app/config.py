@@ -78,7 +78,15 @@ class Settings(BaseSettings):
 
     @property
     def allowed_origins_list(self) -> list[str]:
-        return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
+        origins = [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
+        # SECURITY: Wildcard CORS asla prodüksiyonda kabul edilmemeli
+        if "*" in origins:
+            print(
+                "SECURITY WARNING: ALLOWED_ORIGINS contains wildcard '*'. "
+                "This allows any origin to call the API. Set explicit origins in production.",
+                file=sys.stderr,
+            )
+        return origins
 
     class Config:
         env_file = ".env"

@@ -193,7 +193,7 @@ def create_share_link(
     plain_password: Optional[str] = None
     password_hash = None
     if data.auto_password:
-        plain_password = secrets.token_urlsafe(8)  # 11-char URL-safe string
+        plain_password = secrets.token_urlsafe(16)  # 22-char URL-safe string (~96-bit entropi)
         from ..services.auth import hash_password
         password_hash = hash_password(plain_password)
     elif data.password:
@@ -500,6 +500,7 @@ def guest_list_markers(
         db.query(Marker)
         .filter(Marker.asset_id == asset.id)
         .order_by(Marker.timestamp.asc().nullsfirst(), Marker.created_at.asc())
+        .limit(200)
         .all()
     )
     return [

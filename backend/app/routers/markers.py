@@ -186,7 +186,7 @@ def delete_marker(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Marker sil. Tüm proje üyeleri silebilir."""
+    """Marker sil. Yalnızca oluşturan, proje sahibi veya admin silebilir."""
     marker = db.query(Marker).filter(Marker.id == marker_id).first()
     if not marker:
         raise HTTPException(status_code=404, detail="Marker not found")
@@ -194,6 +194,16 @@ def delete_marker(
     del_asset  = _get_asset_checked(marker.asset_id, current_user, db)
     asset_id   = marker.asset_id
     project_id = del_asset.project_id
+
+    # Yetki: yalnızca oluşturan, proje sahibi veya admin
+    from ..models.user import UserRole
+    from ..models.project import Project
+    is_creator      = marker.created_by_id == current_user.id
+    is_admin        = current_user.role == UserRole.admin
+    project         = db.query(Project).filter(Project.id == project_id).first()
+    is_project_owner = project and project.owner_id == current_user.id
+    if not (is_creator or is_admin or is_project_owner):
+        raise HTTPException(status_code=403, detail="Bu marker'ı silme yetkiniz yok")
     mid        = marker.id
     db.delete(marker)
     db.commit()

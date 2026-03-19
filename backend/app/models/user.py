@@ -4,6 +4,11 @@ from sqlalchemy.sql import func
 import enum
 from ..database import Base
 
+# Giriş başarısız sayısı bu değere ulaşınca hesap kilitlenir
+MAX_FAILED_LOGINS = 5
+# Kilit süresi (dakika)
+LOCKOUT_MINUTES   = 15
+
 
 class UserRole(str, enum.Enum):
     admin = "admin"
@@ -24,6 +29,10 @@ class User(Base):
     avatar_url = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Brute-force koruması
+    failed_login_count = Column(Integer, default=0, nullable=False)
+    locked_until       = Column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     owned_projects = relationship("Project", back_populates="owner", foreign_keys="Project.owner_id")

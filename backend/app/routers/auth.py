@@ -45,19 +45,39 @@ def login(
     db: Session = Depends(get_db),
 ):
     """Login with email and password. Rate-limited to prevent brute force."""
-    user = authenticate_user(db, form_data.username, form_data.password)
-    if not user:
+    result = authenticate_user(db, form_data.username, form_data.password)
+
+    if result == "locked":
+        from ..models.user import LOCKOUT_MINUTES
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Hesap geçici olarak kilitlendi. {LOCKOUT_MINUTES} dakika sonra tekrar deneyin.",
+        )
+
+    if not result:
         # Generic message — don't reveal whether email exists
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials",
+            detail="Geçersiz kimlik bilgileri",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    user = result
     if not user.is_active:
-        raise HTTPException(status_code=403, detail="Account is disabled")
+        raise HTTPException(status_code=403, detail="Hesap devre dışı bırakıldı")
 
     token = create_access_token({"sub": str(user.id)})
-    return {"access_token": token, "token_type": "bearer", "user": user}
+    from fastapi.responses import JSONResponse
+    from ..schemas.user import UserResponse
+    content = {
+        "access_token": token,
+        "token_type":   "bearer",
+        "user":         UserResponse.model_validate(user).model_dump(mode="json"),
+    }
+    response = JSONResponse(content=content)
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    return response
 
 
 @router.get("/me", response_model=UserResponse)
@@ -67,16 +87,32 @@ def me(current_user: User = Depends(get_current_user)):
 
 @router.patch("/users/{user_id}/role", response_model=UserResponse)
 def update_user_role(
+    request: Request,
     user_id: int,
     data: UserRoleUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
     """Admin-only: update a user's role."""
+    import logging
+    audit_log = logging.getLogger("shadow.audit")
+
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    old_role = user.role
     user.role = data.role
     db.commit()
     db.refresh(user)
+
+    # Denetim kaydı — kimin, neyi, ne zaman değiştirdiğini takip et
+    audit_log.info(
+        "ROLE_CHANGE admin=%s(%d) target=%s(%d) %s→%s ip=%s",
+        current_user.username, current_user.id,
+        user.username, user.id,
+        old_role.value, data.role.value,
+        request.client.host if request.client else "unknown",
+    )
+
     return user

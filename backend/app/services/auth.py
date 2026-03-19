@@ -3,7 +3,7 @@ from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
-from ..models.user import User
+from ..models.user import User, MAX_FAILED_LOGINS, LOCKOUT_MINUTES
 from ..schemas.user import TokenData
 from ..config import settings
 
@@ -39,7 +39,48 @@ def decode_token(token: str) -> Optional[TokenData]:
 
 
 def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
+    """
+    Kimlik doğrulama + brute-force koruması.
+    Dönüş değerleri:
+      • User      → başarılı
+      • None      → geçersiz kimlik bilgileri (kullanıcı yok / şifre yanlış)
+      • "locked"  → hesap geçici olarak kilitlendi
+    """
     user = db.query(User).filter(User.email == email).first()
-    if not user or not verify_password(password, user.hashed_password):
+
+    # Kullanıcı yoksa zamanlama saldırısını önlemek için sahte doğrulama yap
+    if not user:
+        pwd_context.verify("dummy", "$2b$12$invalidhashpadding.......................invalid.hash....")
         return None
+
+    now = datetime.now(timezone.utc)
+
+    # Kilit kontrolü
+    if user.locked_until:
+        locked = (
+            user.locked_until
+            if user.locked_until.tzinfo
+            else user.locked_until.replace(tzinfo=timezone.utc)
+        )
+        if now < locked:
+            return "locked"  # type: ignore[return-value]
+        # Kilit süresi geçti — sıfırla
+        user.failed_login_count = 0
+        user.locked_until = None
+
+    if not verify_password(password, user.hashed_password):
+        # Başarısız giriş sayacını artır
+        user.failed_login_count = (user.failed_login_count or 0) + 1
+        if user.failed_login_count >= MAX_FAILED_LOGINS:
+            user.locked_until = now + timedelta(minutes=LOCKOUT_MINUTES)
+            user.failed_login_count = 0
+        db.commit()
+        return None
+
+    # Başarılı giriş — sayacı sıfırla
+    if user.failed_login_count:
+        user.failed_login_count = 0
+        user.locked_until = None
+        db.commit()
+
     return user

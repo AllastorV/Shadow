@@ -25,6 +25,9 @@ def _run_migrations() -> None:
     stmts = [
         "ALTER TABLE comments ADD COLUMN guest_name VARCHAR(100)",
         "ALTER TABLE markers  ADD COLUMN guest_name VARCHAR(100)",
+        # Brute-force koruması (yeni sütunlar)
+        "ALTER TABLE users ADD COLUMN failed_login_count INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN locked_until DATETIME",
     ]
     with engine.connect() as conn:
         for stmt in stmts:
@@ -183,3 +186,18 @@ def ai_status():
     """AI backend durumunu döndür (Ollama / Anthropic)."""
     from .services.ai_service import ai_service
     return ai_service.get_status()
+
+
+@app.get("/.well-known/security.txt", include_in_schema=False)
+def security_txt():
+    """RFC 9116 — güvenlik açığı bildirim politikası."""
+    from fastapi.responses import PlainTextResponse
+    content = (
+        "# Shadow DAM — Güvenlik Açığı Bildirim Politikası\n"
+        "Contact: mailto:security@shadow.internal\n"
+        "Preferred-Languages: tr, en\n"
+        "Policy: https://shadow.internal/security-policy\n"
+        "Canonical: https://shadow.internal/.well-known/security.txt\n"
+        "Expires: 2026-12-31T23:59:59Z\n"
+    )
+    return PlainTextResponse(content, headers={"Cache-Control": "max-age=86400"})
