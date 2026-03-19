@@ -92,6 +92,8 @@ export interface ShareLink {
   download_count?: number
   asset_id: number
   created_at: string
+  has_password?: boolean
+  plain_password?: string
 }
 
 export type MarkerColor = 'red' | 'green' | 'blue' | 'yellow' | 'purple' | 'orange' | 'cyan'

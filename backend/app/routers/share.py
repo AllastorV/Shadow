@@ -186,14 +186,23 @@ def create_share_link(
     # SECURITY: Projeye erişim doğrula
     get_accessible_project(asset.project_id, current_user, db)
 
+    # recipient_name takes priority over legacy label query param
+    effective_label = data.recipient_name or label or None
+
+    # Determine password: auto-generate or use provided
+    plain_password: Optional[str] = None
     password_hash = None
-    if data.password:
+    if data.auto_password:
+        plain_password = secrets.token_urlsafe(8)  # 11-char URL-safe string
+        from ..services.auth import hash_password
+        password_hash = hash_password(plain_password)
+    elif data.password:
         from ..services.auth import hash_password
         password_hash = hash_password(data.password)
 
     link = ShareLink(
         token=secrets.token_urlsafe(32),  # 256-bit entropi
-        label=label,
+        label=effective_label,
         permission=data.permission,
         expires_at=data.expires_at,
         password_hash=password_hash,
@@ -205,7 +214,12 @@ def create_share_link(
     db.add(link)
     db.commit()
     db.refresh(link)
-    return link
+
+    # Build response manually to inject transient plain_password
+    resp = ShareLinkResponse.model_validate(link)
+    resp.plain_password = plain_password
+    resp.has_password = password_hash is not None
+    return resp
 
 
 # ── Asset'in paylaşım linklerini listele ─────────────────────────────────────

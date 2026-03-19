@@ -1,5 +1,5 @@
-from pydantic import BaseModel, field_validator
-from typing import Optional
+from pydantic import BaseModel, field_validator, model_validator
+from typing import Optional, Any
 from datetime import datetime, timezone
 from ..models.share_link import SharePermission
 
@@ -8,6 +8,8 @@ class ShareLinkCreate(BaseModel):
     permission: SharePermission = SharePermission.view
     expires_at: Optional[datetime] = None
     password: Optional[str] = None
+    recipient_name: Optional[str] = None
+    auto_password: bool = False
 
     @field_validator("expires_at")
     @classmethod
@@ -29,6 +31,15 @@ class ShareLinkCreate(BaseModel):
                 raise ValueError("Share link password too long")
         return v
 
+    @field_validator("recipient_name")
+    @classmethod
+    def recipient_name_length(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            v = v.strip()
+            if len(v) > 100:
+                raise ValueError("Recipient name too long")
+        return v or None
+
 
 class ShareLinkResponse(BaseModel):
     id: int
@@ -41,6 +52,16 @@ class ShareLinkResponse(BaseModel):
     download_count: int = 0
     asset_id: Optional[int] = None
     created_at: datetime
+    has_password: bool = False
+    plain_password: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def compute_has_password(cls, data: Any) -> Any:
+        # When loading from ORM object, compute has_password from password_hash
+        if hasattr(data, "password_hash"):
+            data.__dict__.setdefault("has_password", bool(data.password_hash))
+        return data
 
     class Config:
         from_attributes = True

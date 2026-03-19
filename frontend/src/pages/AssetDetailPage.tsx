@@ -6,6 +6,7 @@ import {
   Share2, MessageSquare, Image, Video, Music, FileText,
   Loader2, Link2, Lock, Calendar, Eye, Copy, CheckCheck,
   Trash2, DownloadCloud, MapPin, Plus, FileCode2, Film,
+  UserPlus, KeyRound, ShieldCheck, RefreshCw,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../utils/api'
@@ -45,10 +46,12 @@ export default function AssetDetailPage() {
   const { user } = useAuthStore()
   const [tab, setTab] = useState<Tab>('info')
   const [newComment, setNewComment] = useState('')
+  const [inviteName, setInviteName] = useState('')
   const [sharePermission, setSharePermission] = useState<'view' | 'comment' | 'edit' | 'download'>('view')
-  const [shareLabel, setShareLabel] = useState('')
-  const [sharePassword, setSharePassword] = useState('')
+  const [invitePasswordMode, setInvitePasswordMode] = useState<'none' | 'auto' | 'manual'>('none')
+  const [invitePassword, setInvitePassword] = useState('')
   const [shareExpiry, setShareExpiry] = useState('')
+  const [lastPlainPassword, setLastPlainPassword] = useState<string | null>(null)
 
   // Marker state
   const [markerLabel, setMarkerLabel] = useState('')
@@ -170,18 +173,26 @@ export default function AssetDetailPage() {
       api.post(`/share/asset/${assetId}`, {
         permission: sharePermission,
         expires_at: shareExpiry || null,
-        password: sharePassword || null,
-      }, { params: { label: shareLabel || undefined } }).then((r) => r.data),
+        password: invitePasswordMode === 'manual' ? (invitePassword || null) : null,
+        auto_password: invitePasswordMode === 'auto',
+        recipient_name: inviteName.trim() || null,
+      }).then((r) => r.data),
     onSuccess: (newLink) => {
       queryClient.invalidateQueries({ queryKey: ['shareLinks', assetId] })
       const url = `${window.location.origin}/share/${newLink.token}`
       navigator.clipboard.writeText(url).catch(() => {})
-      toast.success('Link oluşturuldu ve panoya kopyalandı!')
-      setShareLabel('')
-      setSharePassword('')
+      if (newLink.plain_password) {
+        setLastPlainPassword(newLink.plain_password)
+        toast.success('Davet oluşturuldu! Şifre aşağıda — bir kez gösterilir.')
+      } else {
+        toast.success('Davet oluşturuldu ve link kopyalandı!')
+      }
+      setInviteName('')
+      setInvitePassword('')
       setShareExpiry('')
+      setInvitePasswordMode('none')
     },
-    onError: () => toast.error('Link oluşturulamadı'),
+    onError: () => toast.error('Davet oluşturulamadı'),
   })
 
   const revokeMutation = useMutation({
@@ -648,54 +659,72 @@ export default function AssetDetailPage() {
           {/* SHARE TAB */}
           {tab === 'share' && (
             <>
-              {/* Mevcut linkler */}
-              {shareLinks && shareLinks.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Paylaşım Linkleri</p>
-                  {shareLinks.map((link) => (
-                    <ShareLinkCard
-                      key={link.id}
-                      link={link}
-                      onRevoke={() => revokeMutation.mutate(link.id)}
-                      revoking={revokeMutation.isPending}
-                    />
-                  ))}
-                </div>
-              )}
+              {/* ── Kişi Davet Et formu ── */}
+              <div className="space-y-3">
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide flex items-center gap-1.5">
+                  <UserPlus size={11} /> Kişi Davet Et
+                </p>
 
-              {/* Yeni link oluştur */}
-              <div className={clsx('space-y-3', shareLinks && shareLinks.length > 0 && 'border-t border-surface-300 pt-4')}>
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Yeni Link Oluştur</p>
+                {/* Ad */}
                 <div>
-                  <label className="text-xs text-slate-500 mb-1 block">Etiket</label>
+                  <label className="text-xs text-slate-500 mb-1 block">Ad Soyad <span className="text-red-400">*</span></label>
                   <input
                     className="input text-xs"
-                    placeholder="ör. Müşteri İncelemesi"
-                    value={shareLabel}
-                    onChange={(e) => setShareLabel(e.target.value)}
+                    placeholder="ör. Ahmet Yılmaz"
+                    value={inviteName}
+                    onChange={(e) => setInviteName(e.target.value)}
                   />
                 </div>
+
+                {/* İzin seviyesi */}
                 <div>
-                  <label className="text-xs text-slate-500 mb-1 block">İzin</label>
+                  <label className="text-xs text-slate-500 mb-1 block">Yetki</label>
                   <select className="input text-xs" value={sharePermission} onChange={(e) => setSharePermission(e.target.value as any)}>
                     <option value="view">Yalnızca görüntüle</option>
-                    <option value="comment">Yorum yap</option>
-                    <option value="edit">Düzenle (marker + yorum ekleyebilir)</option>
-                    <option value="download">İndir</option>
+                    <option value="comment">Yorum yapabilir</option>
+                    <option value="edit">Düzenleyebilir (marker + yorum)</option>
+                    <option value="download">İndirebilir</option>
                   </select>
                 </div>
+
+                {/* Parola modu */}
                 <div>
-                  <label className="text-xs text-slate-500 mb-1 flex items-center gap-1">
-                    <Lock size={10} /> Parola (isteğe bağlı)
+                  <label className="text-xs text-slate-500 mb-1.5 flex items-center gap-1">
+                    <Lock size={10} /> Parola Koruması
                   </label>
-                  <input
-                    className="input text-xs"
-                    type="password"
-                    placeholder="En az 4 karakter"
-                    value={sharePassword}
-                    onChange={(e) => setSharePassword(e.target.value)}
-                  />
+                  <div className="flex gap-1.5">
+                    {(['none', 'auto', 'manual'] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        onClick={() => setInvitePasswordMode(mode)}
+                        className={clsx(
+                          'flex-1 py-1.5 rounded-lg text-[11px] font-medium border transition-colors',
+                          invitePasswordMode === mode
+                            ? 'bg-brand-500/20 border-brand-500/40 text-brand-300'
+                            : 'bg-surface-200 border-surface-300 text-slate-500 hover:text-slate-300'
+                        )}
+                      >
+                        {mode === 'none' ? 'Yok' : mode === 'auto' ? 'Otomatik' : 'Manuel'}
+                      </button>
+                    ))}
+                  </div>
+                  {invitePasswordMode === 'auto' && (
+                    <p className="text-[11px] text-slate-500 mt-1.5 flex items-center gap-1">
+                      <RefreshCw size={9} /> Rastgele şifre oluşturulur, bir kez gösterilir.
+                    </p>
+                  )}
+                  {invitePasswordMode === 'manual' && (
+                    <input
+                      className="input text-xs mt-2"
+                      type="password"
+                      placeholder="En az 4 karakter"
+                      value={invitePassword}
+                      onChange={(e) => setInvitePassword(e.target.value)}
+                    />
+                  )}
                 </div>
+
+                {/* Son kullanma tarihi */}
                 <div>
                   <label className="text-xs text-slate-500 mb-1 flex items-center gap-1">
                     <Calendar size={10} /> Son kullanma tarihi (isteğe bağlı)
@@ -707,15 +736,68 @@ export default function AssetDetailPage() {
                     onChange={(e) => setShareExpiry(e.target.value)}
                   />
                 </div>
+
                 <button
-                  onClick={() => createShareMutation.mutate()}
+                  onClick={() => {
+                    if (!inviteName.trim()) { toast.error('Ad Soyad gerekli'); return }
+                    if (invitePasswordMode === 'manual' && invitePassword.length < 4) {
+                      toast.error('Parola en az 4 karakter olmalı'); return
+                    }
+                    createShareMutation.mutate()
+                  }}
                   disabled={createShareMutation.isPending}
                   className="btn-primary w-full justify-center"
                 >
-                  <Share2 size={13} />
-                  {createShareMutation.isPending ? 'Oluşturuluyor…' : 'Link Oluştur'}
+                  <UserPlus size={13} />
+                  {createShareMutation.isPending ? 'Davet oluşturuluyor…' : 'Davet Oluştur'}
                 </button>
               </div>
+
+              {/* ── Oluşturulan şifre (bir kez göster) ── */}
+              {lastPlainPassword && (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 space-y-2">
+                  <p className="text-xs font-semibold text-amber-300 flex items-center gap-1.5">
+                    <KeyRound size={11} /> Oluşturulan Şifre — Bir Kez Gösterilir
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 bg-surface-200 rounded-lg px-3 py-1.5 text-xs font-mono text-amber-200 tracking-wider">
+                      {lastPlainPassword}
+                    </code>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(lastPlainPassword)
+                        toast.success('Şifre kopyalandı!')
+                      }}
+                      className="btn-ghost p-1.5"
+                    >
+                      <Copy size={12} />
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => setLastPlainPassword(null)}
+                    className="text-[11px] text-slate-500 hover:text-slate-300 transition-colors"
+                  >
+                    Tamam, gizle
+                  </button>
+                </div>
+              )}
+
+              {/* ── Davetli listesi ── */}
+              {shareLinks && shareLinks.length > 0 && (
+                <div className="space-y-2 border-t border-surface-300 pt-4">
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide flex items-center gap-1.5">
+                    <ShieldCheck size={11} /> Davetliler ({shareLinks.length})
+                  </p>
+                  {shareLinks.map((link) => (
+                    <ShareLinkCard
+                      key={link.id}
+                      link={link}
+                      onRevoke={() => revokeMutation.mutate(link.id)}
+                      revoking={revokeMutation.isPending}
+                    />
+                  ))}
+                </div>
+              )}
             </>
           )}
         </div>
@@ -1075,9 +1157,14 @@ function ShareLinkCard({
     )}>
       {/* Üst satır */}
       <div className="flex items-center justify-between gap-2 mb-2">
-        <span className="text-xs font-medium text-slate-200 truncate">
-          {link.label || 'Adsız Link'}
-        </span>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="text-xs font-semibold text-slate-100 truncate">
+            {link.label || 'İsimsiz Davetli'}
+          </span>
+          {link.has_password && (
+            <Lock size={10} className="text-amber-400 shrink-0" title="Parola korumalı" />
+          )}
+        </div>
         <div className="flex items-center gap-1.5 shrink-0">
           {isExpired ? (
             <span className="badge bg-amber-500/20 text-amber-400 flex items-center gap-0.5">
