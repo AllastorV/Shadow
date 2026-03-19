@@ -5,8 +5,15 @@ import toast from 'react-hot-toast'
 import api from '../utils/api'
 import { useAuthStore } from '../store/auth'
 
+interface FormState {
+  email: string
+  username: string
+  full_name: string
+  password: string
+}
+
 export default function RegisterPage() {
-  const [form, setForm] = useState({ email: '', username: '', full_name: '', password: '' })
+  const [form, setForm] = useState<FormState>({ email: '', username: '', full_name: '', password: '' })
   const [loading, setLoading] = useState(false)
   const { setAuth } = useAuthStore()
   const navigate = useNavigate()
@@ -17,9 +24,23 @@ export default function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // Basic client-side validation (server validates too)
+    if (form.password.length < 8) {
+      toast.error('Password must be at least 8 characters')
+      return
+    }
+
     setLoading(true)
     try {
-      await api.post('/auth/register', { ...form, role: 'admin' })
+      // SECURITY: Do NOT send role — backend always assigns 'editor' to new users
+      await api.post('/auth/register', {
+        email: form.email,
+        username: form.username,
+        full_name: form.full_name,
+        password: form.password,
+      })
+
       const fd = new FormData()
       fd.append('username', form.email)
       fd.append('password', form.password)
@@ -28,7 +49,12 @@ export default function RegisterPage() {
       toast.success('Account created!')
       navigate('/dashboard')
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Registration failed')
+      const detail = err.response?.data?.detail
+      if (Array.isArray(detail)) {
+        toast.error(detail[0]?.msg || 'Registration failed')
+      } else {
+        toast.error(typeof detail === 'string' ? detail : 'Registration failed')
+      }
     } finally {
       setLoading(false)
     }
@@ -65,9 +91,16 @@ export default function RegisterPage() {
                   className="input"
                   placeholder={field.placeholder}
                   required
+                  minLength={field.name === 'password' ? 8 : field.name === 'username' ? 3 : undefined}
+                  maxLength={field.name === 'password' ? 128 : field.name === 'full_name' ? 100 : field.name === 'username' ? 32 : undefined}
                 />
               </div>
             ))}
+
+            <p className="text-xs text-slate-500">
+              Password must be at least 8 characters with uppercase, lowercase, and a number.
+            </p>
+
             <button type="submit" disabled={loading} className="btn-primary w-full justify-center">
               {loading ? 'Creating…' : 'Create account'}
             </button>

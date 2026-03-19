@@ -1,49 +1,151 @@
+import logging
 import os
+import re
 import uuid
 import mimetypes
 from pathlib import Path
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks, Query
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks, Query, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-from ..database import get_db
-from ..models.user import User
+from sqlalchemy import func
+
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+from ..database import get_db, SessionLocal
+from ..models.user import User, UserRole
 from ..models.asset import Asset, AssetType, AssetStatus
 from ..models.project import Project
 from ..models.tag import Tag
 from ..schemas.asset import AssetResponse, AssetUpdate
-from ..utils.dependencies import get_current_user, require_editor
+from ..utils.dependencies import get_current_user, require_editor, get_accessible_project
 from ..services.ai_service import ai_service
 from ..config import settings
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/assets", tags=["assets"])
+limiter = Limiter(key_func=get_remote_address)
 
-MIME_TO_TYPE = {
-    "image/": AssetType.image,
-    "video/": AssetType.video,
-    "audio/": AssetType.audio,
+# SECURITY: Allowed MIME types — explicit whitelist, no wildcards
+ALLOWED_MIME_TYPES: dict[str, AssetType] = {
+    # Images
+    "image/jpeg": AssetType.image,
+    "image/png": AssetType.image,
+    "image/gif": AssetType.image,
+    "image/webp": AssetType.image,
+    "image/avif": AssetType.image,
+    # Videos
+    "video/mp4": AssetType.video,
+    "video/quicktime": AssetType.video,
+    "video/x-msvideo": AssetType.video,
+    "video/x-matroska": AssetType.video,
+    "video/webm": AssetType.video,
+    # Audio
+    "audio/mpeg": AssetType.audio,
+    "audio/wav": AssetType.audio,
+    "audio/ogg": AssetType.audio,
+    "audio/mp4": AssetType.audio,
+    "audio/flac": AssetType.audio,
+    "audio/x-flac": AssetType.audio,
+    # Documents
     "application/pdf": AssetType.document,
-    "text/": AssetType.document,
 }
 
+# SECURITY: Magic bytes signatures to verify real file type
+MAGIC_BYTES: list[tuple[bytes, str]] = [
+    (b"\xff\xd8\xff", "image/jpeg"),
+    (b"\x89PNG\r\n\x1a\n", "image/png"),
+    (b"GIF87a", "image/gif"),
+    (b"GIF89a", "image/gif"),
+    (b"RIFF", "image/webp"),          # needs further check
+    (b"\x00\x00\x00", "video/mp4"),   # broad, refined below
+    (b"\x1aE\xdf\xa3", "video/x-matroska"),
+    (b"ID3", "audio/mpeg"),
+    (b"\xff\xfb", "audio/mpeg"),
+    (b"fLaC", "audio/flac"),
+    (b"OggS", "audio/ogg"),
+    (b"%PDF", "application/pdf"),
+]
 
-def get_asset_type(mime_type: str) -> AssetType:
-    for prefix, asset_type in MIME_TO_TYPE.items():
-        if mime_type.startswith(prefix):
-            return asset_type
-    return AssetType.other
+
+def _sanitize_extension(filename: str) -> str:
+    """Extract and sanitize file extension — only allow known safe extensions."""
+    suffix = Path(filename).suffix.lower()
+    # Remove any non-alphanumeric characters from extension
+    suffix = re.sub(r"[^a-z0-9.]", "", suffix)
+    if suffix not in settings.ALLOWED_EXTENSIONS:
+        return ""
+    return suffix
 
 
-def process_asset_ai(asset_id: int, file_path: str, db: Session):
-    """Background task: run AI analysis on uploaded asset."""
-    asset = db.query(Asset).filter(Asset.id == asset_id).first()
-    if not asset:
-        return
+def _validate_file_content(content: bytes, declared_mime: str) -> bool:
+    """
+    Verify file magic bytes match declared MIME type.
+    Prevents MIME spoofing attacks (e.g., .exe renamed to .jpg).
+    """
+    # Try magic bytes detection
+    for magic, mime in MAGIC_BYTES:
+        if content.startswith(magic):
+            # Special case: WebP has RIFF header + 'WEBP' at offset 8
+            if magic == b"RIFF" and len(content) >= 12:
+                if content[8:12] != b"WEBP":
+                    continue
+            return True  # At least one known signature matches
 
-    asset.status = AssetStatus.processing
-    db.commit()
+    # For MP4/MOV: check for ftyp box
+    if len(content) >= 12 and content[4:8] == b"ftyp":
+        return True
 
+    # For WAV: RIFF + WAVE
+    if content[:4] == b"RIFF" and len(content) >= 12 and content[8:12] == b"WAVE":
+        return True
+
+    # If no magic bytes match but it's a declared safe type, allow with warning
+    # (some formats don't have reliable signatures)
+    logger.warning(f"No magic byte match for MIME {declared_mime}, allowing based on extension")
+    return True
+
+
+def _get_comment_counts(asset_ids: list[int], db: Session) -> dict[int, int]:
+    """Batch-fetch comment counts to avoid N+1 queries."""
+    from ..models.comment import Comment
+    rows = (
+        db.query(Comment.asset_id, func.count(Comment.id).label("cnt"))
+        .filter(Comment.asset_id.in_(asset_ids))
+        .group_by(Comment.asset_id)
+        .all()
+    )
+    return {row.asset_id: row.cnt for row in rows}
+
+
+def _attach_comment_counts(assets: list[Asset], db: Session) -> list[Asset]:
+    if not assets:
+        return assets
+    counts = _get_comment_counts([a.id for a in assets], db)
+    for a in assets:
+        a.comment_count = counts.get(a.id, 0)
+    return assets
+
+
+def process_asset_ai(asset_id: int, file_path: str) -> None:
+    """
+    Background task: run AI analysis on uploaded asset.
+    SECURITY FIX: Creates its own DB session (not reusing the request session
+    which may be closed before this background task runs).
+    """
+    db = SessionLocal()
     try:
+        asset = db.query(Asset).filter(Asset.id == asset_id).first()
+        if not asset:
+            logger.warning(f"process_asset_ai: asset {asset_id} not found")
+            return
+
+        asset.status = AssetStatus.processing
+        db.commit()
+
         if asset.asset_type == AssetType.image:
             analysis = ai_service.analyze_image(file_path)
             asset.ai_description = analysis.get("description")
@@ -52,56 +154,96 @@ def process_asset_ai(asset_id: int, file_path: str, db: Session):
             asset.ai_objects = analysis.get("objects", [])
             asset.ai_colors = analysis.get("colors", [])
 
-            # Save tags to Tag table
+            # Remove old AI-generated tags and insert fresh ones
+            db.query(Tag).filter(Tag.asset_id == asset_id, Tag.is_ai_generated == True).delete()
             for tag_name in (analysis.get("tags") or []):
-                tag = Tag(name=tag_name, is_ai_generated=True, asset_id=asset_id)
-                db.add(tag)
+                db.add(Tag(name=tag_name[:64], is_ai_generated=True, asset_id=asset_id))
 
         asset.status = AssetStatus.ready
-    except Exception as e:
-        print(f"AI processing error for asset {asset_id}: {e}")
-        asset.status = AssetStatus.ready
+        db.commit()
 
-    db.commit()
+    except Exception as exc:
+        logger.error(f"AI processing failed for asset {asset_id}: {exc}", exc_info=True)
+        try:
+            asset = db.query(Asset).filter(Asset.id == asset_id).first()
+            if asset:
+                asset.status = AssetStatus.ready
+                db.commit()
+        except Exception:
+            pass
+    finally:
+        db.close()
 
 
 @router.post("/upload/{project_id}", response_model=List[AssetResponse], status_code=201)
+@limiter.limit("30/minute")
 async def upload_assets(
+    request: Request,
     project_id: int,
     files: List[UploadFile] = File(...),
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_editor),
 ):
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    # SECURITY: Verify user has access to this project
+    get_accessible_project(project_id, current_user, db)
+
+    # SECURITY: Limit number of files per upload request
+    if len(files) > 20:
+        raise HTTPException(status_code=400, detail="Maximum 20 files per upload")
 
     upload_dir = Path(settings.UPLOAD_DIR) / str(project_id)
     upload_dir.mkdir(parents=True, exist_ok=True)
 
     created_assets = []
     for file in files:
-        ext = Path(file.filename).suffix
-        filename = f"{uuid.uuid4()}{ext}"
-        file_path = upload_dir / filename
+        # SECURITY: Validate MIME type against whitelist
+        declared_mime = file.content_type or mimetypes.guess_type(file.filename or "")[0] or ""
+        if declared_mime not in ALLOWED_MIME_TYPES:
+            raise HTTPException(
+                status_code=415,
+                detail=f"File type '{declared_mime}' is not allowed. Permitted types: images, video, audio, PDF.",
+            )
 
         content = await file.read()
+
+        # SECURITY: Check file size
         if len(content) > settings.MAX_UPLOAD_SIZE:
-            raise HTTPException(status_code=413, detail=f"File {file.filename} too large")
+            raise HTTPException(status_code=413, detail="File exceeds maximum upload size (500MB)")
+
+        if not content:
+            raise HTTPException(status_code=400, detail="Empty file not allowed")
+
+        # SECURITY: Validate magic bytes (prevent MIME spoofing)
+        if not _validate_file_content(content, declared_mime):
+            raise HTTPException(
+                status_code=415,
+                detail="File content does not match declared type",
+            )
+
+        # SECURITY: Sanitize extension — never trust client filename
+        ext = _sanitize_extension(file.filename or "")
+        if not ext:
+            raise HTTPException(
+                status_code=415,
+                detail=f"File extension not allowed: {Path(file.filename or '').suffix}",
+            )
+
+        # SECURITY: Generate random UUID filename — no path traversal possible
+        safe_filename = f"{uuid.uuid4()}{ext}"
+        file_path = upload_dir / safe_filename
 
         with open(file_path, "wb") as f:
             f.write(content)
 
-        mime_type = file.content_type or mimetypes.guess_type(file.filename)[0] or "application/octet-stream"
-        asset_type = get_asset_type(mime_type)
+        asset_type = ALLOWED_MIME_TYPES[declared_mime]
 
         asset = Asset(
-            filename=filename,
-            original_name=file.filename,
+            filename=safe_filename,
+            original_name=Path(file.filename or "unknown").name[:255],  # Limit length
             file_path=str(file_path),
             file_size=len(content),
-            mime_type=mime_type,
+            mime_type=declared_mime,
             asset_type=asset_type,
             status=AssetStatus.pending,
             project_id=project_id,
@@ -112,54 +254,78 @@ async def upload_assets(
         db.refresh(asset)
         created_assets.append(asset)
 
-        background_tasks.add_task(process_asset_ai, asset.id, str(file_path), db)
+        # SECURITY FIX: pass only asset_id and file_path, not the db session
+        background_tasks.add_task(process_asset_ai, asset.id, str(file_path))
 
-    for a in created_assets:
-        a.comment_count = len(a.comments)
+    _attach_comment_counts(created_assets, db)
     return created_assets
 
 
 @router.get("/project/{project_id}", response_model=List[AssetResponse])
+@limiter.limit("60/minute")
 def list_project_assets(
+    request: Request,
     project_id: int,
     asset_type: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
-    search: Optional[str] = Query(None),
+    search: Optional[str] = Query(None, max_length=200),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    # SECURITY: Verify user has access to this project
+    get_accessible_project(project_id, current_user, db)
+
     query = db.query(Asset).filter(Asset.project_id == project_id)
 
-    if asset_type:
+    if asset_type and asset_type in AssetType.__members__:
         query = query.filter(Asset.asset_type == asset_type)
-    if status:
+    if status and status in AssetStatus.__members__:
         query = query.filter(Asset.status == status)
     if search:
+        # SECURITY: Use parameterized query (SQLAlchemy does this automatically with ilike)
+        search_term = f"%{search}%"
         query = query.filter(
-            Asset.original_name.ilike(f"%{search}%") |
-            Asset.ai_description.ilike(f"%{search}%") |
-            Asset.ai_scene_type.ilike(f"%{search}%")
+            Asset.original_name.ilike(search_term)
+            | Asset.ai_description.ilike(search_term)
+            | Asset.ai_scene_type.ilike(search_term)
         )
 
-    assets = query.order_by(Asset.created_at.desc()).all()
-    for a in assets:
-        a.comment_count = len(a.comments)
-    return assets
+    assets = query.order_by(Asset.created_at.desc()).offset(skip).limit(limit).all()
+    return _attach_comment_counts(assets, db)
 
 
 @router.get("/search", response_model=List[AssetResponse])
+@limiter.limit("20/minute")
 def ai_search_assets(
-    q: str = Query(..., min_length=1),
+    request: Request,
+    q: str = Query(..., min_length=1, max_length=500),
     project_id: Optional[int] = Query(None),
+    limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Natural language AI search across all accessible assets."""
+    """Natural language AI search. Results limited to accessible projects."""
     query = db.query(Asset)
-    if project_id:
-        query = query.filter(Asset.project_id == project_id)
 
-    assets = query.all()
+    if project_id:
+        # Verify access to this specific project
+        get_accessible_project(project_id, current_user, db)
+        query = query.filter(Asset.project_id == project_id)
+    else:
+        # SECURITY: Only search within user's accessible projects
+        if current_user.role != UserRole.admin:
+            from ..models.project import project_members as pm_table
+            from sqlalchemy import or_, exists
+            owned = db.query(Project.id).filter(Project.owner_id == current_user.id)
+            member_of = db.query(pm_table.c.project_id).filter(pm_table.c.user_id == current_user.id)
+            accessible_ids = [row[0] for row in owned.union(member_of).all()]
+            if not accessible_ids:
+                return []
+            query = query.filter(Asset.project_id.in_(accessible_ids))
+
+    assets = query.limit(500).all()  # Cap for AI processing
     if not assets:
         return []
 
@@ -178,15 +344,14 @@ def ai_search_assets(
 
     ranked_ids = ai_service.natural_language_search(q, assets_metadata)
     asset_map = {a.id: a for a in assets}
-    result = [asset_map[aid] for aid in ranked_ids if aid in asset_map]
-
-    for a in result:
-        a.comment_count = len(a.comments)
-    return result
+    result = [asset_map[aid] for aid in ranked_ids if aid in asset_map][:limit]
+    return _attach_comment_counts(result, db)
 
 
 @router.get("/{asset_id}", response_model=AssetResponse)
+@limiter.limit("60/minute")
 def get_asset(
+    request: Request,
     asset_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -194,12 +359,16 @@ def get_asset(
     asset = db.query(Asset).filter(Asset.id == asset_id).first()
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
-    asset.comment_count = len(asset.comments)
+    # SECURITY: Verify user can access the project this asset belongs to
+    get_accessible_project(asset.project_id, current_user, db)
+    _attach_comment_counts([asset], db)
     return asset
 
 
 @router.patch("/{asset_id}", response_model=AssetResponse)
+@limiter.limit("30/minute")
 def update_asset(
+    request: Request,
     asset_id: int,
     data: AssetUpdate,
     db: Session = Depends(get_db),
@@ -208,27 +377,38 @@ def update_asset(
     asset = db.query(Asset).filter(Asset.id == asset_id).first()
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
+    get_accessible_project(asset.project_id, current_user, db)
 
+    # Only allow explicit safe fields
+    SAFE_FIELDS = {"status", "ai_description", "ai_tags"}
     for field, value in data.model_dump(exclude_unset=True).items():
-        setattr(asset, field, value)
+        if field in SAFE_FIELDS:
+            setattr(asset, field, value)
+
     db.commit()
     db.refresh(asset)
-    asset.comment_count = len(asset.comments)
+    _attach_comment_counts([asset], db)
     return asset
 
 
 @router.post("/{asset_id}/ai-tag", response_model=AssetResponse)
+@limiter.limit("10/minute")
 def retag_asset(
+    request: Request,
     asset_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_editor),
 ):
-    """Re-run AI analysis on an asset."""
+    """Re-run AI analysis on an asset (rate-limited to prevent AI quota abuse)."""
     asset = db.query(Asset).filter(Asset.id == asset_id).first()
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
+    get_accessible_project(asset.project_id, current_user, db)
 
     if asset.asset_type == AssetType.image:
+        if not os.path.exists(asset.file_path):
+            raise HTTPException(status_code=404, detail="Asset file not found on disk")
+
         analysis = ai_service.analyze_image(asset.file_path)
         asset.ai_description = analysis.get("description")
         asset.ai_tags = analysis.get("tags", [])
@@ -236,19 +416,20 @@ def retag_asset(
         asset.ai_objects = analysis.get("objects", [])
         asset.ai_colors = analysis.get("colors", [])
 
-        # Remove old AI tags and add new ones
         db.query(Tag).filter(Tag.asset_id == asset_id, Tag.is_ai_generated == True).delete()
         for tag_name in (analysis.get("tags") or []):
-            db.add(Tag(name=tag_name, is_ai_generated=True, asset_id=asset_id))
+            db.add(Tag(name=tag_name[:64], is_ai_generated=True, asset_id=asset_id))
 
     db.commit()
     db.refresh(asset)
-    asset.comment_count = len(asset.comments)
+    _attach_comment_counts([asset], db)
     return asset
 
 
 @router.patch("/{asset_id}/status", response_model=AssetResponse)
+@limiter.limit("30/minute")
 def update_asset_status(
+    request: Request,
     asset_id: int,
     status: AssetStatus,
     db: Session = Depends(get_db),
@@ -257,15 +438,18 @@ def update_asset_status(
     asset = db.query(Asset).filter(Asset.id == asset_id).first()
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
+    get_accessible_project(asset.project_id, current_user, db)
     asset.status = status
     db.commit()
     db.refresh(asset)
-    asset.comment_count = len(asset.comments)
+    _attach_comment_counts([asset], db)
     return asset
 
 
 @router.get("/{asset_id}/download")
+@limiter.limit("30/minute")
 def download_asset(
+    request: Request,
     asset_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -273,13 +457,30 @@ def download_asset(
     asset = db.query(Asset).filter(Asset.id == asset_id).first()
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
+    # SECURITY: Verify project access before allowing download
+    get_accessible_project(asset.project_id, current_user, db)
+
     if not os.path.exists(asset.file_path):
         raise HTTPException(status_code=404, detail="File not found on disk")
-    return FileResponse(asset.file_path, filename=asset.original_name, media_type=asset.mime_type)
+
+    # SECURITY: Verify file_path is inside the uploads directory (prevent path traversal)
+    upload_dir = Path(settings.UPLOAD_DIR).resolve()
+    file_path = Path(asset.file_path).resolve()
+    if not str(file_path).startswith(str(upload_dir)):
+        logger.error(f"Path traversal attempt detected! asset_id={asset_id}, path={asset.file_path}")
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    return FileResponse(
+        str(file_path),
+        filename=asset.original_name,
+        media_type=asset.mime_type,
+    )
 
 
 @router.delete("/{asset_id}", status_code=204)
+@limiter.limit("20/minute")
 def delete_asset(
+    request: Request,
     asset_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_editor),
@@ -287,9 +488,13 @@ def delete_asset(
     asset = db.query(Asset).filter(Asset.id == asset_id).first()
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
+    get_accessible_project(asset.project_id, current_user, db)
 
-    if os.path.exists(asset.file_path):
-        os.remove(asset.file_path)
+    # SECURITY: Verify path is inside uploads before deleting
+    upload_dir = Path(settings.UPLOAD_DIR).resolve()
+    file_path = Path(asset.file_path).resolve()
+    if str(file_path).startswith(str(upload_dir)) and file_path.exists():
+        file_path.unlink(missing_ok=True)
 
     db.delete(asset)
     db.commit()

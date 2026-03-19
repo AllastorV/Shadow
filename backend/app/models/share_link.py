@@ -16,7 +16,7 @@ class ShareLink(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     token = Column(String, unique=True, index=True, nullable=False)
-    label = Column(String, nullable=True)  # e.g. "Client Review", "Internal"
+    label = Column(String, nullable=True)
     permission = Column(Enum(SharePermission), default=SharePermission.view)
     is_active = Column(Boolean, default=True)
     expires_at = Column(DateTime(timezone=True), nullable=True)
@@ -24,8 +24,8 @@ class ShareLink(Base):
     view_count = Column(Integer, default=0)
     download_count = Column(Integer, default=0)
 
-    # Activity log stored as JSON array
-    activity_log = Column(JSON, nullable=True, default=list)
+    # Activity log — use None + runtime init to avoid mutable default
+    activity_log = Column(JSON, nullable=True)
 
     asset_id = Column(Integer, ForeignKey("assets.id"), nullable=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)

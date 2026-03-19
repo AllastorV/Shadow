@@ -10,8 +10,8 @@ class Comment(Base):
     id = Column(Integer, primary_key=True, index=True)
     content = Column(Text, nullable=False)
     timestamp = Column(Float, nullable=True)  # video/audio timestamp in seconds
-    x_pos = Column(Float, nullable=True)  # annotation x position (0-100%)
-    y_pos = Column(Float, nullable=True)  # annotation y position (0-100%)
+    x_pos = Column(Float, nullable=True)      # annotation x position (0-100%)
+    y_pos = Column(Float, nullable=True)      # annotation y position (0-100%)
     is_resolved = Column(Boolean, default=False)
     parent_id = Column(Integer, ForeignKey("comments.id"), nullable=True)
 
@@ -22,4 +22,9 @@ class Comment(Base):
 
     asset = relationship("Asset", back_populates="comments")
     author = relationship("User", back_populates="comments")
-    replies = relationship("Comment", backref=ForeignKey("comments.parent_id"))
+    # Self-referential: replies to this comment
+    replies = relationship(
+        "Comment",
+        foreign_keys=[parent_id],
+        backref="parent_comment",
+    )

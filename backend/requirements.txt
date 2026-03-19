@@ -14,3 +14,5 @@ pydantic-settings==2.7.0
 python-dotenv==1.0.1
 aiosqlite==0.20.0
 greenlet==3.1.1
+slowapi==0.1.9
+limits==3.14.0
