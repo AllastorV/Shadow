@@ -3,9 +3,9 @@ import Sidebar from './Sidebar'
 
 export default function AppLayout() {
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen overflow-hidden" style={{ backgroundColor: 'var(--c-bg)' }}>
       <Sidebar />
-      <main className="flex-1 overflow-auto bg-surface">
+      <main className="flex-1 overflow-auto" style={{ backgroundColor: 'var(--c-bg)' }}>
         <Outlet />
       </main>
     </div>

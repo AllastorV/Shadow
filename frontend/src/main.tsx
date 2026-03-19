@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
 import App from './App'
+import { ThemeProvider } from './utils/theme'
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -27,22 +28,27 @@ const queryClient = new QueryClient({
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <App />
-        <Toaster
-          position="bottom-right"
-          toastOptions={{
-            duration: 3500,
-            style: {
-              background: '#1e2130',
-              color: '#e2e8f0',
-              border: '1px solid #2e3145',
-              fontSize: '13px',
-            },
-          }}
-        />
-      </BrowserRouter>
-    </QueryClientProvider>
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <App />
+          <Toaster
+            position="bottom-right"
+            toastOptions={{
+              duration: 3500,
+              style: {
+                background: '#131722',
+                color: '#e2e8f0',
+                border: '1px solid #232a40',
+                fontSize: '13px',
+                fontFamily: "'Plus Jakarta Sans', Inter, sans-serif",
+                borderRadius: '12px',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+              },
+            }}
+          />
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ThemeProvider>
   </React.StrictMode>,
 )
