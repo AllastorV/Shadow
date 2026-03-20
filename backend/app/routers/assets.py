@@ -234,8 +234,8 @@ def process_asset_ai(asset_id: int, file_path: str) -> None:
 async def upload_assets(
     request: Request,
     project_id: int,
-    files: List[UploadFile] = File(...),
     background_tasks: BackgroundTasks,
+    files: List[UploadFile] = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_editor),
 ):
