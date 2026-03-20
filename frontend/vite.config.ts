@@ -52,6 +52,7 @@ export default defineConfig({
 
   // Tree-shaking için optimize import çözümü
   resolve: {
-    mainFields: ['module', 'main'],
+    // 'browser' field'ı önce kontrol et — browser-safe bundle seçilsin (axios Node.js kodu dahil edilmesin)
+    mainFields: ['browser', 'module', 'main'],
   },
 })

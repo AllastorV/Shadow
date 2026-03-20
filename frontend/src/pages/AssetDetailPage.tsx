@@ -267,7 +267,8 @@ export default function AssetDetailPage() {
                     className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold ring-2 shrink-0 select-none"
                     style={{
                       background: `hsl(${(u.id * 47) % 360}, 60%, 45%)`,
-                      ringColor:  'var(--c-bg)',
+                      outline: '2px solid var(--c-bg)',
+                      outlineOffset: '-1px',
                     }}
                   >
                     {(u.full_name || u.username).slice(0, 2).toUpperCase()}
@@ -275,7 +276,7 @@ export default function AssetDetailPage() {
                 ))}
                 {activeUsers.length > 5 && (
                   <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold ring-2 shrink-0"
-                    style={{ background: '#2d3a55', color: '#8b9ab8', ringColor: 'var(--c-bg)' }}>
+                    style={{ background: '#2d3a55', color: '#8b9ab8' }}>
                     +{activeUsers.length - 5}
                   </div>
                 )}
@@ -1225,7 +1226,7 @@ function ShareLinkCard({
             {link.label || 'İsimsiz Davetli'}
           </span>
           {link.has_password && (
-            <Lock size={10} className="text-amber-400 shrink-0" title="Parola korumalı" />
+            <span title="Parola korumalı"><Lock size={10} className="text-amber-400 shrink-0" /></span>
           )}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
@@ -1262,7 +1263,7 @@ function ShareLinkCard({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3 text-[11px] text-slate-600">
           <span className="flex items-center gap-0.5"><Eye size={10} /> {link.view_count}</span>
-          {link.download_count > 0 && (
+          {(link.download_count ?? 0) > 0 && (
             <span className="flex items-center gap-0.5"><DownloadCloud size={10} /> {link.download_count}</span>
           )}
           {link.expires_at && (
